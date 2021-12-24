@@ -19,6 +19,10 @@ class RuleTest(TestCase):
     def _token_result(token: Lexer.Token) -> Parser.Result:
         return Parser.Result(token.rule_name, token)
 
+    @staticmethod
+    def _tokens_result(rule_name: Optional[str], tokens: Sequence[Lexer.Token]) -> Parser.Result:
+        return RuleTest._child_result(rule_name, [RuleTest._token_result(token) for token in tokens])
+
     @ staticmethod
     def _child_result(type: Optional[str], children: Sequence[Parser.Result]) -> Parser.Result:
         return Parser.Result(type, children=children)
@@ -36,6 +40,21 @@ class RuleTest(TestCase):
                 Parser.State(lexer_result, len(tokens))
             )
         )
+
+    def _test_rule_cases(self, rule: Parser.Rule, cases: Sequence[Sequence[Lexer.Token]]) -> None:
+        for tokens in cases:
+            with self.subTest(tokens):
+                self._test_rule(
+                    rule,
+                    tokens,
+                    self._tokens_result(rule.name, tokens)
+                )
+
+    def _test_rule_error_cases(self, rule: Parser.Rule, cases: Sequence[Sequence[Lexer.Token]]) -> None:
+        for tokens in cases:
+            with self.subTest(tokens):
+                with self.assertRaises(Parser.Error):
+                    self._apply_rule(rule, tokens)
 
 
 class LiteralTest(RuleTest):
@@ -57,87 +76,55 @@ class LiteralTest(RuleTest):
 
 class AndTest(RuleTest):
     def test_match(self):
-        self._test_rule(
-            Parser.And('a',
-                       [
-                           Parser.Literal('b'),
-                           Parser.Literal('c'),
-                       ]
-                       ),
+        self._test_rule_cases(
+            Parser.And('a', [
+                Parser.Literal('b'),
+                Parser.Literal('c'),
+            ]),
             [
-                self._token('b', '1'),
-                self._token('c', '2'),
-            ],
-            self._child_result(
-                'a',
                 [
-                    self._token_result(self._token('b', '1')),
-                    self._token_result(self._token('c', '2')),
-                ]
-            )
+                    self._token('b', '1'),
+                    self._token('c', '2'),
+                ],
+            ]
         )
 
     def test_mismatch(self):
-        tokens: Sequence[Lexer.Token]
-        for tokens in [
-            [self._token('b', '1')],
-            [self._token('c', '1')],
-            [self._token('d', '1')],
-            [],
-        ]:
-            with self.subTest(tokens):
-                with self.assertRaises(Parser.Error):
-                    self._apply_rule(
-                        Parser.And('a',
-                                   [
-                                       Parser.Literal('b'),
-                                       Parser.Literal('c'),
-                                   ]
-                                   ),
-                        tokens,
-                    )
+        self._test_rule_error_cases(
+            Parser.And('a', [
+                Parser.Literal('b'),
+                Parser.Literal('c'),
+            ]),
+            [
+                [self._token('b', '1')],
+                [self._token('c', '1')],
+                [self._token('d', '1')],
+                [],
+            ]
+        )
 
 
 class OrTest(RuleTest):
     def test_match(self):
-        token: Lexer.Token
-        for token in [
-            self._token('b', '1'),
-            self._token('c', '2'),
-        ]:
-            with self.subTest(token):
-                self._test_rule(
-                    Parser.Or('a',
-                              [
-                                  Parser.Literal('b'),
-                                  Parser.Literal('c'),
-                              ]
-                              ),
-                    [
-                        token
-                    ],
-                    self._child_result(
-                        'a',
-                        [
-                            self._token_result(token),
-                        ]
-                    )
-                )
+        self._test_rule_cases(
+            Parser.Or('a', [
+                Parser.Literal('b'),
+                Parser.Literal('c'),
+            ]),
+            [
+                [self._token('b', '1')],
+                [self._token('c', '2')],
+            ]
+        )
 
     def test_mismatch(self):
-        tokens: Sequence[Lexer.Token]
-        for tokens in [
-            [self._token('d', '1')],
-            [],
-        ]:
-            with self.subTest(tokens):
-                with self.assertRaises(Parser.Error):
-                    self._apply_rule(
-                        Parser.Or('a',
-                                  [
-                                      Parser.Literal('b'),
-                                      Parser.Literal('c'),
-                                  ]
-                                  ),
-                        tokens,
-                    )
+        self._test_rule_error_cases(
+            Parser.Or('a', [
+                Parser.Literal('b'),
+                Parser.Literal('c'),
+            ]),
+            [
+                [self._token('d', '1')],
+                [],
+            ]
+        )
