@@ -128,3 +128,65 @@ class OrTest(RuleTest):
                 [],
             ]
         )
+
+
+class ZeroOrOneTest(RuleTest):
+    def test_match(self):
+        self._test_rule_cases(
+            Parser.ZeroOrOne('a', Parser.Literal('b')),
+            [
+                [],
+                [self._token('b', '1')],
+            ]
+        )
+
+
+class ZeroOrMoreTest(RuleTest):
+    def test_match(self):
+        self._test_rule_cases(
+            Parser.ZeroOrMore('a', Parser.Literal('b')),
+            [
+                [],
+                [self._token('b', '1')],
+                [self._token('b', '1'), self._token('b', '2')],
+            ]
+        )
+
+
+class OneOrMoreTest(RuleTest):
+    def test_match(self):
+        self._test_rule_cases(
+            Parser.OneOrMore('a', Parser.Literal('b')),
+            [
+                [self._token('b', '1')],
+                [self._token('b', '1'), self._token('b', '2')],
+            ]
+        )
+
+    def test_mismatch(self):
+        self._test_rule_error_cases(
+            Parser.OneOrMore('a', Parser.Literal('b')),
+            [
+                [],
+            ]
+        )
+
+
+class UntilEndTest(RuleTest):
+    def test_match(self):
+        self._test_rule_cases(
+            Parser.UntilEnd('a', Parser.Literal('b')),
+            [
+                [],
+                [self._token('b', '1')],
+                [self._token('b', '1'), self._token('b', '2')],
+            ]
+        )
+
+    def test_mismatch(self):
+        self._test_rule_error_cases(
+            Parser.UntilEnd('a', Parser.Literal('b')),
+            [
+                [self._token('c', '1')],
+            ]
+        )

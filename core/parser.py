@@ -118,6 +118,70 @@ class Parser:
             raise Parser.Error(self, state, child_errors)
 
     @dataclass(frozen=True)
+    class ZeroOrMore(Rule):
+        child: 'Parser.Rule'
+
+        def apply(self, state: 'Parser.State') -> 'Parser.Rule.Result':
+            child_results: MutableSequence[Parser.Result] = []
+            child_state: Parser.State = state
+            while True:
+                try:
+                    child_result = self.child.apply(child_state)
+                    child_results.append(child_result.result)
+                    child_state = child_result.state
+                except Parser.Error:
+                    break
+            return Parser.Rule.Result(Parser.Result(self.name, children=child_results), child_state)
+
+    @dataclass(frozen=True)
+    class OneOrMore(Rule):
+        child: 'Parser.Rule'
+
+        def apply(self, state: 'Parser.State') -> 'Parser.Rule.Result':
+            try:
+                child_result: Parser.Rule.Result = self.child.apply(state)
+            except Parser.Error as error:
+                raise Parser.Error(self, state, [error])
+            child_results: MutableSequence[Parser.Result] = [
+                child_result.result]
+            child_state: Parser.State = child_result.state
+            while True:
+                try:
+                    child_result = self.child.apply(child_state)
+                    child_results.append(child_result.result)
+                    child_state = child_result.state
+                except Parser.Error:
+                    break
+            return Parser.Rule.Result(Parser.Result(self.name, children=child_results), child_state)
+
+    @dataclass(frozen=True)
+    class UntilEnd(Rule):
+        child: 'Parser.Rule'
+
+        def apply(self, state: 'Parser.State') -> 'Parser.Rule.Result':
+            child_results: MutableSequence[Parser.Result] = []
+            child_state: Parser.State = state
+            while not child_state.empty:
+                try:
+                    child_result = self.child.apply(child_state)
+                    child_results.append(child_result.result)
+                    child_state = child_result.state
+                except Parser.Error as error:
+                    raise Parser.Error(self, state, [error])
+            return Parser.Rule.Result(Parser.Result(self.name, children=child_results), child_state)
+
+    @dataclass(frozen=True)
+    class ZeroOrOne(Rule):
+        child: 'Parser.Rule'
+
+        def apply(self, state: 'Parser.State') -> 'Parser.Rule.Result':
+            try:
+                child_result: Parser.Rule.Result = self.child.apply(state)
+                return Parser.Rule.Result(Parser.Result(self.name, children=[child_result.result]), child_result.state)
+            except Parser.Error:
+                return Parser.Rule.Result(Parser.Result(self.name), state)
+
+    @dataclass(frozen=True)
     class Literal(Rule):
         def __post_init__(self):
             if self.name is None:
