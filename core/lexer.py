@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import cached_property
-from typing import FrozenSet, MutableSequence, Optional, Sequence
+from typing import MutableSequence, Optional, Sequence
 
 
 @dataclass(frozen=True)
 class Lexer:
-    rules: FrozenSet['Lexer.Rule']
+    rules: Sequence['Lexer.Rule']
 
     @dataclass(frozen=True)
     class Error(Exception):
@@ -28,7 +28,7 @@ class Lexer:
         @cached_property
         def value(self) -> str:
             if self.empty:
-                raise ValueError(self.pos)
+                raise Lexer.Error(self)
             return self.input[self.pos:]
 
     @dataclass(frozen=True)

@@ -60,26 +60,27 @@ class RuleTest(TestCase):
 class LiteralTest(RuleTest):
     def test_match(self):
         self._test_rule(
-            Parser.Literal('int'),
+            Parser.Literal('int', 'int'),
             [self._token('int', '1')],
             self._token_result(self._token('int', '1'))
         )
 
     def test_empty(self):
         with self.assertRaises(Parser.Error):
-            self._apply_rule(Parser.Literal('int'), [])
+            self._apply_rule(Parser.Literal('int', 'int'), [])
 
     def test_mismatch(self):
         with self.assertRaises(Parser.Error):
-            self._apply_rule(Parser.Literal('int'), [self._token('str', 'a')])
+            self._apply_rule(Parser.Literal('int', 'int'),
+                             [self._token('str', 'a')])
 
 
 class AndTest(RuleTest):
     def test_match(self):
         self._test_rule_cases(
             Parser.And('a', [
-                Parser.Literal('b'),
-                Parser.Literal('c'),
+                Parser.Literal('b', 'b'),
+                Parser.Literal('c', 'c'),
             ]),
             [
                 [
@@ -92,8 +93,8 @@ class AndTest(RuleTest):
     def test_mismatch(self):
         self._test_rule_error_cases(
             Parser.And('a', [
-                Parser.Literal('b'),
-                Parser.Literal('c'),
+                Parser.Literal('b', 'b'),
+                Parser.Literal('c', 'c'),
             ]),
             [
                 [self._token('b', '1')],
@@ -108,8 +109,8 @@ class OrTest(RuleTest):
     def test_match(self):
         self._test_rule_cases(
             Parser.Or('a', [
-                Parser.Literal('b'),
-                Parser.Literal('c'),
+                Parser.Literal('b', 'b'),
+                Parser.Literal('c', 'c'),
             ]),
             [
                 [self._token('b', '1')],
@@ -120,8 +121,8 @@ class OrTest(RuleTest):
     def test_mismatch(self):
         self._test_rule_error_cases(
             Parser.Or('a', [
-                Parser.Literal('b'),
-                Parser.Literal('c'),
+                Parser.Literal('b', 'b'),
+                Parser.Literal('c', 'c'),
             ]),
             [
                 [self._token('d', '1')],
@@ -133,7 +134,7 @@ class OrTest(RuleTest):
 class ZeroOrOneTest(RuleTest):
     def test_match(self):
         self._test_rule_cases(
-            Parser.ZeroOrOne('a', Parser.Literal('b')),
+            Parser.ZeroOrOne('a', Parser.Literal('b', 'b')),
             [
                 [],
                 [self._token('b', '1')],
@@ -144,7 +145,7 @@ class ZeroOrOneTest(RuleTest):
 class ZeroOrMoreTest(RuleTest):
     def test_match(self):
         self._test_rule_cases(
-            Parser.ZeroOrMore('a', Parser.Literal('b')),
+            Parser.ZeroOrMore('a', Parser.Literal('b', 'b')),
             [
                 [],
                 [self._token('b', '1')],
@@ -156,7 +157,7 @@ class ZeroOrMoreTest(RuleTest):
 class OneOrMoreTest(RuleTest):
     def test_match(self):
         self._test_rule_cases(
-            Parser.OneOrMore('a', Parser.Literal('b')),
+            Parser.OneOrMore('a', Parser.Literal('b', 'b')),
             [
                 [self._token('b', '1')],
                 [self._token('b', '1'), self._token('b', '2')],
@@ -165,7 +166,7 @@ class OneOrMoreTest(RuleTest):
 
     def test_mismatch(self):
         self._test_rule_error_cases(
-            Parser.OneOrMore('a', Parser.Literal('b')),
+            Parser.OneOrMore('a', Parser.Literal('b', 'b')),
             [
                 [],
             ]
@@ -175,7 +176,7 @@ class OneOrMoreTest(RuleTest):
 class UntilEndTest(RuleTest):
     def test_match(self):
         self._test_rule_cases(
-            Parser.UntilEnd('a', Parser.Literal('b')),
+            Parser.UntilEnd('a', Parser.Literal('b', 'b')),
             [
                 [],
                 [self._token('b', '1')],
@@ -185,7 +186,7 @@ class UntilEndTest(RuleTest):
 
     def test_mismatch(self):
         self._test_rule_error_cases(
-            Parser.UntilEnd('a', Parser.Literal('b')),
+            Parser.UntilEnd('a', Parser.Literal('b', 'b')),
             [
                 [self._token('c', '1')],
             ]

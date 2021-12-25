@@ -8,8 +8,8 @@ from typing import Mapping, MutableSequence, Optional, Sequence
 
 @dataclass(frozen=True)
 class Parser:
+    root_rule_name: str
     rules: Sequence['Parser.Rule']
-    root_rule_name: str = 'root'
 
     @dataclass(frozen=True)
     class Error(Exception):
@@ -183,15 +183,21 @@ class Parser:
 
     @dataclass(frozen=True)
     class Literal(Rule):
-        def __post_init__(self):
-            if self.name is None:
-                raise ValueError(self.name)
+        value: str
 
         def apply(self, state: 'Parser.State') -> 'Parser.Rule.Result':
-            if not state.empty and self.name == state.head.rule_name:
-                return Parser.Rule.Result(Parser.Result(self.name, token=state.head), state.tail)
+            if not state.empty and self.value == state.head.rule_name:
+                return Parser.Rule.Result(Parser.Result(self.value, token=state.head), state.tail)
             else:
                 raise Parser.Error(self, state)
+
+    def __post_init__(self):
+        if len(self.rules_by_name) != len(self.rules_by_name):
+            raise ValueError('duplicate rules')
+
+    @cached_property
+    def rules_with_name(self) -> Sequence['Parser.Rule']:
+        return [rule for rule in self.rules if rule.name is not None]
 
     @cached_property
     def rules_by_name(self) -> Mapping[str, 'Parser.Rule']:
