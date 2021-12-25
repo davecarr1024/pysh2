@@ -1,4 +1,5 @@
-from typing import Sequence
+from dataclasses import dataclass
+from typing import Generic, Sequence, TypeVar
 from .lexer import Lexer
 from .parser import Parser
 
@@ -191,3 +192,37 @@ class UntilEndTest(RuleTest):
                 [self._token('c', '1')],
             ]
         )
+
+
+ResultType = TypeVar('ResultType')
+
+StateType = TypeVar('StateType')
+
+
+@dataclass(frozen=True)
+class Error(Exception, Generic[ResultType, StateType]):
+    result: ResultType
+    state: StateType
+
+
+@dataclass(frozen=True)
+class Result:
+    ...
+
+
+@dataclass(frozen=True)
+class State:
+    ...
+
+
+class ExceptionTest(TestCase):
+    def test_foo(self):
+        try:
+            raise Error[Result, State](Result(), State())
+        except Exception as error:
+            if isinstance(error, type(Error[Result, State](Result(), State()))):
+                e: Error[Result, State] = error
+                assert 0, f'detected {e}'
+            assert 0, 'not detected'
+        except:
+            assert 0, 'not caught'
