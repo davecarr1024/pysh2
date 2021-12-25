@@ -5,6 +5,10 @@ from unittest import TestCase
 
 from . import processor
 
+if 'unittest.util' in __import__('sys').modules:
+    # Show full diff in self.assertEqual.
+    __import__('sys').modules['unittest.util']._MAX_LENGTH = 999999999
+
 
 Error = processor.Error
 
@@ -12,9 +16,6 @@ Error = processor.Error
 @dataclass(frozen=True)
 class ResultValue:
     val: int
-
-
-Result = processor.Result[ResultValue]
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,8 @@ class State:
         return State(self.vals[1:])
 
 
+Result = processor.Result[ResultValue, State]
+
 ResultAndState = processor.ResultAndState[ResultValue, State]
 
 Rule = processor.Rule[ResultValue, State]
@@ -54,7 +57,7 @@ class Literal(Rule):
 
     def apply(self, state: State) -> ResultAndState:
         if not state.empty and state.head == self.val:
-            return ResultAndState(Result(self.name, ResultValue(self.val), []), state.tail)
+            return ResultAndState(Result(self, ResultValue(self.val), []), state.tail)
         raise RuleError(self, state)
 
 
@@ -69,17 +72,25 @@ OneOrMore = processor.OneOrMore[ResultValue, State]
 ZeroOrOne = processor.ZeroOrOne[ResultValue, State]
 
 
+class RuleWithName(Rule):
+    def __eq__(self, rhs: object) -> bool:
+        return isinstance(rhs, processor.Rule) and rhs.name == self.name
+
+    def apply(self, state: State) -> ResultAndState:
+        raise NotImplemented()
+
+
 class IntMatcherTest(TestCase):
-    def _rule_test(self, rule: processor.Rule[ResultValue, State], input: Sequence[int], result: processor.Result[ResultValue]) -> None:
+    def _rule_test(self, rule: Rule, input: Sequence[int], expected_result: Result) -> None:
         self.assertEqual(
             rule.apply(State(input)),
-            processor.ResultAndState[ResultValue, State](
-                result,
+            ResultAndState(
+                expected_result,
                 State([])
             )
         )
 
-    def _rule_tests(self, rule: processor.Rule[ResultValue, State], cases: Sequence[Tuple[Sequence[int], processor.Result[ResultValue]]]) -> None:
+    def _rule_tests(self, rule: Rule, cases: Sequence[Tuple[Sequence[int], Result]]) -> None:
         for case in cases:
             with self.subTest(case):
                 self._rule_test(rule, *case)
@@ -97,11 +108,7 @@ class IntMatcherTest(TestCase):
         self._rule_test(
             Literal('a', 1),
             [1],
-            Result(
-                'a',
-                ResultValue(1),
-                []
-            )
+            Result(RuleWithName('a'), ResultValue(1), [])
         )
 
     def test_literal_mismatch(self):
@@ -123,9 +130,9 @@ class IntMatcherTest(TestCase):
                 ]
             ),
             [1, 2],
-            Result('a', None, [
-                Result('b', ResultValue(1), []),
-                Result('c', ResultValue(2), []),
+            Result(RuleWithName('a'), None, [
+                Result(RuleWithName('b'), ResultValue(1), []),
+                Result(RuleWithName('c'), ResultValue(2), []),
             ])
         )
 
@@ -157,11 +164,13 @@ class IntMatcherTest(TestCase):
             [
                 (
                     [1],
-                    Result('a', None, [Result('b', ResultValue(1), [])])
+                    Result(RuleWithName('a'), None, [
+                           Result(RuleWithName('b'), ResultValue(1), [])])
                 ),
                 (
                     [2],
-                    Result('a', None, [Result('c', ResultValue(2), [])])
+                    Result(RuleWithName('a'), None, [
+                           Result(RuleWithName('c'), ResultValue(2), [])])
                 ),
             ]
         )
@@ -176,10 +185,11 @@ class IntMatcherTest(TestCase):
         self._rule_tests(
             ZeroOrMore('a', Literal('b', 1)),
             [
-                ([], Result('a', None, [])),
-                ([1], Result('a', None, [Result('b', ResultValue(1), [])])),
-                ([1, 1], Result('a', None, [
-                 Result('b', ResultValue(1), []), Result('b', ResultValue(1), [])])),
+                ([], Result(RuleWithName('a'), None, [])),
+                ([1], Result(RuleWithName('a'), None, [
+                 Result(RuleWithName('b'), ResultValue(1), [])])),
+                ([1, 1], Result(RuleWithName('a'), None, [
+                 Result(RuleWithName('b'), ResultValue(1), []), Result(RuleWithName('b'), ResultValue(1), [])])),
             ]
         )
 
@@ -187,9 +197,10 @@ class IntMatcherTest(TestCase):
         self._rule_tests(
             OneOrMore('a', Literal('b', 1)),
             [
-                ([1], Result('a', None, [Result('b', ResultValue(1), [])])),
-                ([1, 1], Result('a', None, [
-                 Result('b', ResultValue(1), []), Result('b', ResultValue(1), [])])),
+                ([1], Result(RuleWithName('a'), None, [
+                 Result(RuleWithName('b'), ResultValue(1), [])])),
+                ([1, 1], Result(RuleWithName('a'), None, [
+                 Result(RuleWithName('b'), ResultValue(1), []), Result(RuleWithName('b'), ResultValue(1), [])])),
             ]
         )
 
@@ -203,7 +214,8 @@ class IntMatcherTest(TestCase):
         self._rule_tests(
             ZeroOrOne('a', Literal('b', 1)),
             [
-                ([], Result('a', None, [])),
-                ([1], Result('a', None, [Result('b', ResultValue(1), [])])),
+                ([], Result(RuleWithName('a'), None, [])),
+                ([1], Result(RuleWithName('a'), None, [
+                 Result(RuleWithName('b'), ResultValue(1), [])])),
             ]
         )

@@ -6,21 +6,7 @@ from typing import Generic, Mapping, MutableSequence, Optional, Sequence, TypeVa
 
 ResultValue = TypeVar('ResultValue')
 
-
-@dataclass(frozen=True)
-class Result(Generic[ResultValue]):
-    rule_name: Optional[str]
-    value: Optional[ResultValue]
-    children: Sequence['Result[ResultValue]']
-
-
 State = TypeVar('State')
-
-
-@dataclass(frozen=True)
-class ResultAndState(Generic[ResultValue, State]):
-    result: Result[ResultValue]
-    state: State
 
 
 @dataclass(frozen=True)
@@ -28,8 +14,20 @@ class Rule(ABC, Generic[ResultValue, State]):
     name: Optional[str]
 
     @abstractmethod
-    def apply(
-        self, state: State) -> ResultAndState[ResultValue, State]: ...
+    def apply(self, state: State) -> 'ResultAndState[ResultValue, State]': ...
+
+
+@dataclass(frozen=True)
+class Result(Generic[ResultValue, State]):
+    rule: Rule[ResultValue, State]
+    value: Optional[ResultValue]
+    children: Sequence['Result[ResultValue, State]']
+
+
+@dataclass(frozen=True)
+class ResultAndState(Generic[ResultValue, State]):
+    result: Result[ResultValue, State]
+    state: State
 
 
 class Error(Exception):
@@ -60,7 +58,7 @@ class Processor(Generic[ResultValue, State]):
     def root_rule(self) -> Rule[ResultValue, State]:
         return self.rules_by_name[self.root_rule_name]
 
-    def _apply(self, state: State) -> Result[ResultValue]:
+    def _apply(self, state: State) -> Result[ResultValue, State]:
         return self.rules_by_name[self.root_rule_name].apply(state).result
 
 
@@ -69,7 +67,7 @@ class And(Rule[ResultValue, State]):
     children: Sequence[Rule[ResultValue, State]]
 
     def apply(self, state: State) -> ResultAndState[ResultValue, State]:
-        child_results: MutableSequence[Result[ResultValue]] = []
+        child_results: MutableSequence[Result[ResultValue, State]] = []
         child_state: State = state
         for child in self.children:
             try:
@@ -79,7 +77,7 @@ class And(Rule[ResultValue, State]):
                 child_state = child_result.state
             except Error as error:
                 raise NestedRuleError(self, state, [error])
-        return ResultAndState[ResultValue, State](Result[ResultValue](self.name, None, child_results), child_state)
+        return ResultAndState[ResultValue, State](Result[ResultValue, State](self, None, child_results), child_state)
 
 
 @ dataclass(frozen=True)
@@ -92,7 +90,7 @@ class Or(Rule[ResultValue, State]):
             try:
                 child_result: ResultAndState[ResultValue, State] = child.apply(
                     state)
-                return ResultAndState[ResultValue, State](Result[ResultValue](self.name, None, [child_result.result]), child_result.state)
+                return ResultAndState[ResultValue, State](Result[ResultValue, State](self, None, [child_result.result]), child_result.state)
             except Error as error:
                 child_errors.append(error)
         raise NestedRuleError(self, state, child_errors)
@@ -103,7 +101,7 @@ class ZeroOrMore(Rule[ResultValue, State]):
     child: Rule[ResultValue, State]
 
     def apply(self, state: State) -> ResultAndState[ResultValue, State]:
-        child_results: MutableSequence[Result[ResultValue]] = []
+        child_results: MutableSequence[Result[ResultValue, State]] = []
         child_state: State = state
         while True:
             try:
@@ -113,7 +111,7 @@ class ZeroOrMore(Rule[ResultValue, State]):
                 child_state = child_result.state
             except Error:
                 break
-        return ResultAndState[ResultValue, State](Result[ResultValue](self.name, None, child_results), child_state)
+        return ResultAndState[ResultValue, State](Result[ResultValue, State](self, None, child_results), child_state)
 
 
 @dataclass(frozen=True)
@@ -124,7 +122,7 @@ class OneOrMore(Rule[ResultValue, State]):
         try:
             child_result: ResultAndState[ResultValue,
                                          State] = self.child.apply(state)
-            child_results: MutableSequence[Result[ResultValue]] = [
+            child_results: MutableSequence[Result[ResultValue, State]] = [
                 child_result.result]
             child_state: State = child_result.state
         except Error as error:
@@ -136,7 +134,7 @@ class OneOrMore(Rule[ResultValue, State]):
                 child_state = child_result.state
             except Error:
                 break
-        return ResultAndState[ResultValue, State](Result[ResultValue](self.name, None, child_results), child_state)
+        return ResultAndState[ResultValue, State](Result[ResultValue, State](self, None, child_results), child_state)
 
 
 @dataclass(frozen=True)
@@ -147,6 +145,6 @@ class ZeroOrOne(Rule[ResultValue, State]):
         try:
             child_result: ResultAndState[ResultValue,
                                          State] = self.child.apply(state)
-            return ResultAndState[ResultValue, State](Result[ResultValue](self.name, None, [child_result.result]), child_result.state)
+            return ResultAndState[ResultValue, State](Result[ResultValue, State](self, None, [child_result.result]), child_result.state)
         except Error:
-            return ResultAndState[ResultValue, State](Result[ResultValue](self.name, None, []), state)
+            return ResultAndState[ResultValue, State](Result[ResultValue, State](self, None, []), state)
