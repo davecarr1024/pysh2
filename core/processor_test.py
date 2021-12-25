@@ -60,6 +60,14 @@ class Literal(Rule):
 
 And = processor.And[ResultValue, State]
 
+Or = processor.Or[ResultValue, State]
+
+ZeroOrMore = processor.ZeroOrMore[ResultValue, State]
+
+OneOrMore = processor.OneOrMore[ResultValue, State]
+
+ZeroOrOne = processor.ZeroOrOne[ResultValue, State]
+
 
 class IntMatcherTest(TestCase):
     def _rule_test(self, rule: processor.Rule[ResultValue, State], input: Sequence[int], result: processor.Result[ResultValue]) -> None:
@@ -119,4 +127,83 @@ class IntMatcherTest(TestCase):
                 Result('b', ResultValue(1), []),
                 Result('c', ResultValue(2), []),
             ])
+        )
+
+    def test_and_mismatch(self):
+        self._rule_error_tests(
+            And(
+                'a',
+                [
+                    Literal('b', 1),
+                    Literal('c', 2),
+                ]
+            ),
+            [
+                [],
+                [2],
+                [3],
+            ]
+        )
+
+    def test_or_match(self):
+        self._rule_tests(
+            Or(
+                'a',
+                [
+                    Literal('b', 1),
+                    Literal('c', 2),
+                ]
+            ),
+            [
+                (
+                    [1],
+                    Result('a', None, [Result('b', ResultValue(1), [])])
+                ),
+                (
+                    [2],
+                    Result('a', None, [Result('c', ResultValue(2), [])])
+                ),
+            ]
+        )
+
+    def test_or_mismatch(self):
+        self._rule_error_tests(
+            Or('a', [Literal('b', 1), Literal('c', 2)]),
+            [[], [3]]
+        )
+
+    def test_zero_or_more_match(self):
+        self._rule_tests(
+            ZeroOrMore('a', Literal('b', 1)),
+            [
+                ([], Result('a', None, [])),
+                ([1], Result('a', None, [Result('b', ResultValue(1), [])])),
+                ([1, 1], Result('a', None, [
+                 Result('b', ResultValue(1), []), Result('b', ResultValue(1), [])])),
+            ]
+        )
+
+    def test_one_or_more_match(self):
+        self._rule_tests(
+            OneOrMore('a', Literal('b', 1)),
+            [
+                ([1], Result('a', None, [Result('b', ResultValue(1), [])])),
+                ([1, 1], Result('a', None, [
+                 Result('b', ResultValue(1), []), Result('b', ResultValue(1), [])])),
+            ]
+        )
+
+    def test_one_or_more_mismatch(self):
+        self._rule_error_tests(
+            OneOrMore('a', Literal('b', 1)),
+            [[], [2]]
+        )
+
+    def test_zero_or_one_match(self):
+        self._rule_tests(
+            ZeroOrOne('a', Literal('b', 1)),
+            [
+                ([], Result('a', None, [])),
+                ([1], Result('a', None, [Result('b', ResultValue(1), [])])),
+            ]
         )
