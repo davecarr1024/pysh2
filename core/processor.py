@@ -1,132 +1,147 @@
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from abc import ABC, abstractmethod, abstractproperty
+from dataclasses import dataclass, field
 from functools import cached_property
 from typing import Generic, Mapping, MutableSequence, Optional, Sequence, TypeVar
 
 
-ResultValue = TypeVar('ResultValue')
-
-State = TypeVar('State')
-
-
-@dataclass(frozen=True)
-class Rule(ABC, Generic[ResultValue, State]):
-    name: Optional[str]
-
-    @abstractmethod
-    def apply(self, state: State) -> 'ResultAndState[ResultValue, State]': ...
-
-
-@dataclass(frozen=True)
-class Result(Generic[ResultValue, State]):
-    rule: Rule[ResultValue, State]
-    value: Optional[ResultValue]
-    children: Sequence['Result[ResultValue, State]']
-
-
-@dataclass(frozen=True)
-class ResultAndState(Generic[ResultValue, State]):
-    result: Result[ResultValue, State]
-    state: State
-
-
-class Error(Exception):
+class ResultValue:
     ...
 
 
-@dataclass(frozen=True)
-class RuleError(Error, Generic[ResultValue, State]):
-    rule: Rule[ResultValue, State]
-    state: State
+_ResultValueType = TypeVar('_ResultValueType', bound=ResultValue)
+
+
+class State(ABC):
+    @abstractproperty
+    def empty(self) -> bool: ...
+
+
+_StateType = TypeVar('_StateType', bound=State)
 
 
 @dataclass(frozen=True)
-class NestedRuleError(RuleError[ResultValue, State]):
+class Rule(ABC, Generic[_ResultValueType, _StateType]):
+    name: Optional[str]
+
+    @abstractmethod
+    def apply(self, state: _StateType) -> 'ResultAndState[_ResultValueType, _StateType]':
+        ...
+
+
+@dataclass(frozen=True)
+class Result(Generic[_ResultValueType, _StateType]):
+    rule: Rule[_ResultValueType, _StateType]
+    value: Optional[_ResultValueType]
+    children: Sequence['Result[_ResultValueType, _StateType]']
+
+
+@dataclass(frozen=True)
+class ResultAndState(Generic[_ResultValueType, _StateType]):
+    result: Result[_ResultValueType, _StateType]
+    state: _StateType
+
+
+@dataclass(frozen=True)
+class Error(Exception):
+    msg: Optional[str] = field(default=None, kw_only=True)
+
+
+@dataclass(frozen=True)
+class RuleError(Error, Generic[_ResultValueType, _StateType]):
+    rule: Rule[_ResultValueType, _StateType]
+    state: _StateType
+
+
+@dataclass(frozen=True)
+class NestedRuleError(RuleError[_ResultValueType, _StateType]):
     child_errors: Sequence[Error]
 
 
 @dataclass(frozen=True)
-class Processor(Generic[ResultValue, State]):
-    rules: Sequence[Rule[ResultValue, State]]
+class Processor(Generic[_ResultValueType, _StateType]):
     root_rule_name: str
+    rules: Sequence[Rule[_ResultValueType, _StateType]]
 
     @cached_property
-    def rules_by_name(self) -> Mapping[str, Rule[ResultValue, State]]:
+    def rules_by_name(self) -> Mapping[str, Rule[_ResultValueType, _StateType]]:
         return {rule.name: rule for rule in self.rules if rule.name is not None}
 
     @cached_property
-    def root_rule(self) -> Rule[ResultValue, State]:
+    def root_rule(self) -> Rule[_ResultValueType, _StateType]:
         return self.rules_by_name[self.root_rule_name]
 
-    def _apply(self, state: State) -> Result[ResultValue, State]:
+    def _apply(self, state: _StateType) -> Result[_ResultValueType, _StateType]:
         return self.rules_by_name[self.root_rule_name].apply(state).result
 
 
 @ dataclass(frozen=True)
-class And(Rule[ResultValue, State]):
-    children: Sequence[Rule[ResultValue, State]]
+class And(Rule[_ResultValueType, _StateType]):
+    children: Sequence[Rule[_ResultValueType, _StateType]]
 
-    def apply(self, state: State) -> ResultAndState[ResultValue, State]:
-        child_results: MutableSequence[Result[ResultValue, State]] = []
-        child_state: State = state
+    def apply(self, state: _StateType) -> ResultAndState[_ResultValueType, _StateType]:
+        child_results: MutableSequence[Result[_ResultValueType, _StateType]] = [
+        ]
+        child_state: _StateType = state
         for child in self.children:
             try:
-                child_result: ResultAndState[ResultValue,
-                                             State] = child.apply(child_state)
+                child_result: ResultAndState[_ResultValueType,
+                                             _StateType] = child.apply(child_state)
                 child_results.append(child_result.result)
                 child_state = child_result.state
             except Error as error:
                 raise NestedRuleError(self, state, [error])
-        return ResultAndState[ResultValue, State](Result[ResultValue, State](self, None, child_results), child_state)
+        return ResultAndState[_ResultValueType, _StateType](Result[_ResultValueType, _StateType](self, None, child_results), child_state)
 
 
-@ dataclass(frozen=True)
-class Or(Rule[ResultValue, State]):
-    children: Sequence[Rule[ResultValue, State]]
+@ dataclass(frozen=True, repr=False)
+class Or(Rule[_ResultValueType, _StateType]):
+    children: Sequence[Rule[_ResultValueType, _StateType]]
 
-    def apply(self, state: State) -> ResultAndState[ResultValue, State]:
+    def apply(self, state: _StateType) -> ResultAndState[_ResultValueType, _StateType]:
         child_errors: MutableSequence[Error] = []
         for child in self.children:
             try:
-                child_result: ResultAndState[ResultValue, State] = child.apply(
+                child_result: ResultAndState[_ResultValueType, _StateType] = child.apply(
                     state)
-                return ResultAndState[ResultValue, State](Result[ResultValue, State](self, None, [child_result.result]), child_result.state)
+                return ResultAndState[_ResultValueType, _StateType](Result[_ResultValueType, _StateType](self, None, [child_result.result]), child_result.state)
             except Error as error:
                 child_errors.append(error)
         raise NestedRuleError(self, state, child_errors)
 
 
 @dataclass(frozen=True)
-class ZeroOrMore(Rule[ResultValue, State]):
-    child: Rule[ResultValue, State]
+class ZeroOrMore(Rule[_ResultValueType, _StateType]):
+    child: Rule[_ResultValueType, _StateType]
 
-    def apply(self, state: State) -> ResultAndState[ResultValue, State]:
-        child_results: MutableSequence[Result[ResultValue, State]] = []
-        child_state: State = state
+    def apply(self, state: _StateType) -> ResultAndState[_ResultValueType, _StateType]:
+        child_results: MutableSequence[Result[_ResultValueType, _StateType]] = [
+        ]
+        child_state: _StateType = state
         while True:
             try:
-                child_result: ResultAndState[ResultValue,
-                                             State] = self.child.apply(child_state)
+                child_result: ResultAndState[_ResultValueType,
+                                             _StateType] = self.child.apply(child_state)
                 child_results.append(child_result.result)
                 child_state = child_result.state
             except Error:
                 break
-        return ResultAndState[ResultValue, State](Result[ResultValue, State](self, None, child_results), child_state)
+        return ResultAndState[_ResultValueType, _StateType](Result[_ResultValueType, _StateType](self, None, child_results), child_state)
 
 
 @dataclass(frozen=True)
-class OneOrMore(Rule[ResultValue, State]):
-    child: Rule[ResultValue, State]
+class OneOrMore(Rule[_ResultValueType, _StateType]):
+    child: Rule[_ResultValueType, _StateType]
 
-    def apply(self, state: State) -> ResultAndState[ResultValue, State]:
+    def apply(self, state: _StateType) -> ResultAndState[_ResultValueType, _StateType]:
         try:
-            child_result: ResultAndState[ResultValue,
-                                         State] = self.child.apply(state)
-            child_results: MutableSequence[Result[ResultValue, State]] = [
+            child_result: ResultAndState[_ResultValueType,
+                                         _StateType] = self.child.apply(state)
+            child_results: MutableSequence[Result[_ResultValueType, _StateType]] = [
                 child_result.result]
-            child_state: State = child_result.state
+            child_state: _StateType = child_result.state
         except Error as error:
-            raise NestedRuleError[ResultValue, State](self, state, [error])
+            raise NestedRuleError[_ResultValueType, _StateType](
+                self, state, [error])
         while True:
             try:
                 child_result = self.child.apply(child_state)
@@ -134,17 +149,36 @@ class OneOrMore(Rule[ResultValue, State]):
                 child_state = child_result.state
             except Error:
                 break
-        return ResultAndState[ResultValue, State](Result[ResultValue, State](self, None, child_results), child_state)
+        return ResultAndState[_ResultValueType, _StateType](Result[_ResultValueType, _StateType](self, None, child_results), child_state)
 
 
 @dataclass(frozen=True)
-class ZeroOrOne(Rule[ResultValue, State]):
-    child: Rule[ResultValue, State]
+class ZeroOrOne(Rule[_ResultValueType, _StateType]):
+    child: Rule[_ResultValueType, _StateType]
 
-    def apply(self, state: State) -> ResultAndState[ResultValue, State]:
+    def apply(self, state: _StateType) -> ResultAndState[_ResultValueType, _StateType]:
         try:
-            child_result: ResultAndState[ResultValue,
-                                         State] = self.child.apply(state)
-            return ResultAndState[ResultValue, State](Result[ResultValue, State](self, None, [child_result.result]), child_result.state)
+            child_result: ResultAndState[_ResultValueType,
+                                         _StateType] = self.child.apply(state)
+            return ResultAndState[_ResultValueType, _StateType](Result[_ResultValueType, _StateType](self, None, [child_result.result]), child_result.state)
         except Error:
-            return ResultAndState[ResultValue, State](Result[ResultValue, State](self, None, []), state)
+            return ResultAndState[_ResultValueType, _StateType](Result[_ResultValueType, _StateType](self, None, []), state)
+
+
+@dataclass(frozen=True)
+class UntilEmpty(Rule[_ResultValueType, _StateType]):
+    child: Rule[_ResultValueType, _StateType]
+
+    def apply(self, state: _StateType) -> ResultAndState[_ResultValueType, _StateType]:
+        child_state: _StateType = state
+        child_results: MutableSequence[Result[_ResultValueType, _StateType]] = [
+        ]
+        while not child_state.empty:
+            try:
+                child_result: ResultAndState[_ResultValueType, _StateType] = self.child.apply(
+                    child_state)
+                child_state = child_result.state
+                child_results.append(child_result.result)
+            except Error as error:
+                raise NestedRuleError(self, state, [error])
+        return ResultAndState(Result(self, None, child_results), child_state)

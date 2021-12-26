@@ -58,28 +58,28 @@ UntilEmpty = processor.UntilEmpty[ResultValue, State]
 
 
 @dataclass(frozen=True)
-class Token:
+class Token(processor.ResultValue):
     type: str
     value: str
 
 
 @dataclass(frozen=True)
-class TokenStream:
+class TokenStream(processor.State):
     tokens: Sequence[Token]
-    pos: int = 0
 
-    @cached_property
+    @property
     def empty(self) -> bool:
-        return self.pos >= len(self.tokens)
+        return not self.tokens
 
     @cached_property
     def head(self) -> Token:
         assert not self.empty
-        return self.tokens[self.pos]
+        return self.tokens[0]
 
     @cached_property
     def tail(self) -> 'TokenStream':
-        return TokenStream(self.tokens, self.pos+1)
+        assert not self.empty
+        return TokenStream(self.tokens[1:])
 
 
 _ROOT_RULE_NAME = '_root'

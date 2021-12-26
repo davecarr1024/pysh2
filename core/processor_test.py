@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Sequence, Tuple
-from unittest import TestCase
+from typing import Sequence
+
+from core import rule_test
 
 from . import processor
 
@@ -14,15 +15,15 @@ Error = processor.Error
 
 
 @dataclass(frozen=True)
-class ResultValue:
+class ResultValue(processor.ResultValue):
     val: int
 
 
 @dataclass(frozen=True)
-class State:
+class State(processor.State):
     vals: Sequence[int]
 
-    @cached_property
+    @property
     def empty(self) -> bool:
         return not self.vals
 
@@ -71,106 +72,58 @@ OneOrMore = processor.OneOrMore[ResultValue, State]
 
 ZeroOrOne = processor.ZeroOrOne[ResultValue, State]
 
+UntilEmpty = processor.UntilEmpty[ResultValue, State]
 
-class RuleWithName(Rule):
-    def __eq__(self, rhs: object) -> bool:
-        return isinstance(rhs, processor.Rule) and rhs.name == self.name
-
-    def apply(self, state: State) -> ResultAndState:
-        raise NotImplemented()
+RuleWithName = rule_test.RuleWithName[ResultValue, State]
 
 
-class IntMatcherTest(TestCase):
-    def _rule_test(self, rule: Rule, input: Sequence[int], expected_result: Result) -> None:
-        self.assertEqual(
-            rule.apply(State(input)),
-            ResultAndState(
-                expected_result,
-                State([])
-            )
-        )
-
-    def _rule_tests(self, rule: Rule, cases: Sequence[Tuple[Sequence[int], Result]]) -> None:
-        for case in cases:
-            with self.subTest(case):
-                self._rule_test(rule, *case)
-
-    def _rule_error_test(self, rule: processor.Rule[ResultValue, State], input: Sequence[int]) -> None:
-        with self.assertRaises(processor.RuleError):
-            rule.apply(State(input))
-
-    def _rule_error_tests(self, rule: processor.Rule[ResultValue, State], inputs: Sequence[Sequence[int]]) -> None:
-        for input in inputs:
-            with self.subTest(input):
-                self._rule_error_test(rule, input)
-
+class IntMatcherTest(rule_test.RuleTest[ResultValue, State]):
     def test_literal_match(self):
         self._rule_test(
             Literal('a', 1),
-            [1],
-            Result(RuleWithName('a'), ResultValue(1), [])
+            State([1]),
+            Result(RuleWithName('a'), ResultValue(1), []),
+            State([])
         )
 
     def test_literal_mismatch(self):
         self._rule_error_tests(
             Literal('a', 1),
-            [
-                [],
-                [2],
-            ]
+            [State([]), State([2])]
         )
 
     def test_and_match(self):
         self._rule_test(
-            And(
-                'a',
-                [
-                    Literal('b', 1),
-                    Literal('c', 2),
-                ]
-            ),
-            [1, 2],
+            And('a', [Literal('b', 1), Literal('c', 2)]),
+            State([1, 2]),
             Result(RuleWithName('a'), None, [
                 Result(RuleWithName('b'), ResultValue(1), []),
                 Result(RuleWithName('c'), ResultValue(2), []),
-            ])
+            ]),
+            State([])
         )
 
     def test_and_mismatch(self):
         self._rule_error_tests(
-            And(
-                'a',
-                [
-                    Literal('b', 1),
-                    Literal('c', 2),
-                ]
-            ),
-            [
-                [],
-                [2],
-                [3],
-            ]
+            And('a', [Literal('b', 1), Literal('c', 2), ]),
+            [State([]), State([2]), State([3])]
         )
 
     def test_or_match(self):
         self._rule_tests(
-            Or(
-                'a',
-                [
-                    Literal('b', 1),
-                    Literal('c', 2),
-                ]
-            ),
+            Or('a', [Literal('b', 1), Literal('c', 2)]),
             [
                 (
-                    [1],
+                    State([1]),
                     Result(RuleWithName('a'), None, [
-                           Result(RuleWithName('b'), ResultValue(1), [])])
+                           Result(RuleWithName('b'), ResultValue(1), [])]),
+                    State([])
                 ),
                 (
-                    [2],
+                    State([2]),
                     Result(RuleWithName('a'), None, [
-                           Result(RuleWithName('c'), ResultValue(2), [])])
+                           Result(RuleWithName('c'), ResultValue(2), [])]),
+                    State([])
                 ),
             ]
         )
@@ -178,18 +131,39 @@ class IntMatcherTest(TestCase):
     def test_or_mismatch(self):
         self._rule_error_tests(
             Or('a', [Literal('b', 1), Literal('c', 2)]),
-            [[], [3]]
+            [State([]), State([3])]
         )
 
     def test_zero_or_more_match(self):
         self._rule_tests(
             ZeroOrMore('a', Literal('b', 1)),
             [
-                ([], Result(RuleWithName('a'), None, [])),
-                ([1], Result(RuleWithName('a'), None, [
-                 Result(RuleWithName('b'), ResultValue(1), [])])),
-                ([1, 1], Result(RuleWithName('a'), None, [
-                 Result(RuleWithName('b'), ResultValue(1), []), Result(RuleWithName('b'), ResultValue(1), [])])),
+                (State([]), Result(RuleWithName('a'), None, []), State([])),
+                (
+                    State([1]),
+                    Result(RuleWithName('a'), None, [
+                           Result(RuleWithName('b'), ResultValue(1), [])]),
+                    State([])
+                ),
+                (
+                    State([1, 1]),
+                    Result(
+                        RuleWithName('a'),
+                        None,
+                        [
+                            Result(
+                                RuleWithName('b'),
+                                ResultValue(1),
+                                []
+                            ),
+                            Result(
+                                RuleWithName('b'),
+                                ResultValue(1),
+                                [])
+                        ]
+                    ),
+                    State([])
+                ),
             ]
         )
 
@@ -197,25 +171,118 @@ class IntMatcherTest(TestCase):
         self._rule_tests(
             OneOrMore('a', Literal('b', 1)),
             [
-                ([1], Result(RuleWithName('a'), None, [
-                 Result(RuleWithName('b'), ResultValue(1), [])])),
-                ([1, 1], Result(RuleWithName('a'), None, [
-                 Result(RuleWithName('b'), ResultValue(1), []), Result(RuleWithName('b'), ResultValue(1), [])])),
+                (
+                    State([1]),
+                    Result(
+                        RuleWithName('a'),
+                        None,
+                        [
+                            Result(
+                                RuleWithName('b'),
+                                ResultValue(1),
+                                []
+                            )
+                        ]
+                    ),
+                    State([])
+                ),
+                (
+                    State([1, 1]),
+                    Result(
+                        RuleWithName('a'),
+                        None,
+                        [
+                            Result(
+                                RuleWithName('b'),
+                                ResultValue(1),
+                                []
+                            ),
+                            Result(
+                                RuleWithName('b'),
+                                ResultValue(1),
+                                []
+                            )
+                        ]
+                    ),
+                    State([])
+                ),
             ]
         )
 
     def test_one_or_more_mismatch(self):
         self._rule_error_tests(
             OneOrMore('a', Literal('b', 1)),
-            [[], [2]]
+            [State([]), State([2])]
         )
 
     def test_zero_or_one_match(self):
         self._rule_tests(
             ZeroOrOne('a', Literal('b', 1)),
             [
-                ([], Result(RuleWithName('a'), None, [])),
-                ([1], Result(RuleWithName('a'), None, [
-                 Result(RuleWithName('b'), ResultValue(1), [])])),
+                (State([]), Result(RuleWithName('a'), None, []), State([])),
+                (
+                    State([1]),
+                    Result(
+                        RuleWithName('a'),
+                        None,
+                        [
+                            Result(
+                                RuleWithName('b'),
+                                ResultValue(1),
+                                []
+                            )
+                        ]
+                    ),
+                    State([])
+                ),
             ]
+        )
+
+    def test_until_end_match(self):
+        self._rule_tests(
+            UntilEmpty('a', Literal('b', 1)),
+            [
+                (State([]), Result(RuleWithName('a'), None, []), State([])),
+                (
+                    State([1]),
+                    Result(
+                        RuleWithName('a'),
+                        None,
+                        [
+                            Result(
+                                RuleWithName('b'),
+                                ResultValue(1),
+                                []
+                            )
+                        ]
+                    ),
+                    State([])
+                ),
+                (
+                    State([1, 1]),
+                    Result(
+                        RuleWithName('a'),
+                        None,
+                        [
+                            Result(
+                                RuleWithName('b'),
+                                ResultValue(1),
+                                []
+                            ),
+                            Result(
+                                RuleWithName('b'),
+                                ResultValue(1),
+                                []
+                            )
+                        ]
+                    ),
+                    State([])
+                ),
+            ]
+        )
+
+    def test_until_empty_mismatch(self):
+        self._rule_error_tests(
+            UntilEmpty('a', Literal('b', 1)),
+            [State([2])]
         )

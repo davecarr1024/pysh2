@@ -39,7 +39,6 @@ class TokenStreamTest(TestCase):
     def test_empty(self):
         self.assertTrue(lexer.TokenStream([]).empty)
         self.assertFalse(lexer.TokenStream([lexer.Token('a', 'b')]).empty)
-        self.assertTrue(lexer.TokenStream([lexer.Token('a', 'b')], 1).empty)
 
     def test_head(self):
         self.assertEqual(lexer.Token('a', 'b'), lexer.TokenStream(
@@ -49,7 +48,7 @@ class TokenStreamTest(TestCase):
         toks: Sequence[lexer.Token] = [
             lexer.Token('a', 'b'), lexer.Token('c', 'd')]
         self.assertEqual(
-            lexer.TokenStream(toks, 1),
+            lexer.TokenStream(toks[1:]),
             lexer.TokenStream(toks).tail
         )
 
