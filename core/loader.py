@@ -3,7 +3,7 @@ from typing import Callable, Mapping, MutableMapping, MutableSequence
 
 
 def lexer_rule(input: str) -> lexer.Rule:
-    operators = '()[-]+?*!^|'
+    operators = '()[-]+?*!^|\\'
     operator_rules: Mapping[str, lexer.Rule] = {
         operator:
         lexer.Literal(operator) for operator in operators}
@@ -24,9 +24,6 @@ def lexer_rule(input: str) -> lexer.Rule:
                 parser.Ref('one_or_more'),
                 parser.Ref('zero_or_one'),
                 parser.Ref('until_empty'),
-                parser.Ref('unary_operation'),
-            ]),
-            'unary_operation': parser.Or([
                 parser.Ref('not'),
             ]),
             'literal': parser.Literal('literal'),
@@ -63,6 +60,7 @@ def lexer_rule(input: str) -> lexer.Rule:
             'unary_operand': parser.Or([
                 parser.Ref('literal'),
                 parser.Ref('class'),
+                parser.Ref('special'),
             ]),
             'class': parser.And([
                 parser.Literal('['),
@@ -82,6 +80,11 @@ def lexer_rule(input: str) -> lexer.Rule:
                 ),
                 parser.Literal(')'),
             ]),
+            'special': parser.And([
+                parser.Literal('\\'),
+                parser.Ref('special_value'),
+            ]),
+            'special_value': parser.Any(),
         },
         lexer_lexer
     )
@@ -107,6 +110,19 @@ def lexer_rule(input: str) -> lexer.Rule:
         assert min.value is not None and max.value is not None
         return lexer.Class(min.value.value, max.value.value)
 
+    def load_special(result: parser.Result) -> lexer.Rule:
+        value_result = result.where_one(
+            parser.Result.rule_name_is('special_value'))
+        assert value_result.value is not None
+        value = value_result.value.value
+        values: Mapping[str, lexer.Rule] = {
+            'n': lexer.Literal('\n'),
+            'w': lexer.Or([lexer.Literal(c) for c in ' \n\t']),
+        }
+        if value in values:
+            return values[value]
+        return lexer.Literal(value)
+
     rule_funcs: Mapping[str, Callable[[parser.Result], lexer.Rule]] = {
         'literal': load_literal,
         'and': load_and,
@@ -117,6 +133,7 @@ def lexer_rule(input: str) -> lexer.Rule:
         'until_empty': load_operation(lexer.UntilEmpty),
         'not': load_operation(lexer.Not),
         'class': load_class,
+        'special': load_special,
     }
 
     def load_rule(result: parser.Result) -> lexer.Rule:

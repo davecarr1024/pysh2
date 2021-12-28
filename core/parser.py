@@ -33,15 +33,22 @@ ZeroOrOne = stream_processor.ZeroOrOne[ResultValue, _Item]
 UntilEmpty = stream_processor.UntilEmpty[ResultValue, _Item]
 
 
+class HeadRule(stream_processor.HeadRule[ResultValue, _Item]):
+    def result(self, head: _Item) -> Result:
+        return Result(value=head)
+
+
 @dataclass(frozen=True)
-class Literal(stream_processor.HeadRule[ResultValue, _Item]):
+class Literal(HeadRule):
     token_type: str
 
     def pred(self, head: _Item) -> bool:
         return head.type == self.token_type
 
-    def result(self, head: _Item) -> Result:
-        return Result(value=head)
+
+class Any(HeadRule):
+    def pred(self, head: _Item) -> bool:
+        return True
 
 
 @dataclass(frozen=True)

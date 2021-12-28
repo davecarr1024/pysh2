@@ -46,6 +46,11 @@ class LoaderTest(unittest.TestCase):
             ('[a-z]', lexer.And([lexer.Class('a', 'z')])),
             ('(a|b)', lexer.And(
                 [lexer.Or([lexer.Literal('a'), lexer.Literal('b')])])),
+            ('\\(', lexer.And([lexer.Literal('(')])),
+            ('\\\\', lexer.And([lexer.Literal('\\')])),
+            ('\\w', lexer.And(
+                [lexer.Or([lexer.Literal(c) for c in ' \n\t'])])),
+            ('\\n', lexer.And([lexer.Literal('\n')])),
         ]:
             with self.subTest((input, rule)):
                 self.assertEqual(rule, loader.lexer_rule(input))

@@ -74,7 +74,14 @@ class Lexer(stream_processor.Processor[_ResultValue, _Item]):
     def _token_stream_from_result(self, result: Result) -> TokenStream:
         token_results: Sequence[Result] = list(
             result.where(self._is_token_result))
-        return TokenStream([Lexer._token_from_result(token_result) for token_result in token_results])
+        return TokenStream(
+            [
+                token for token in
+                [self._token_from_result(token_result)
+                 for token_result in token_results]
+                if not token.type.startswith('_')
+            ]
+        )
 
     def __init__(self, rules: Mapping[str, Rule]):
         processor_rules: MutableMapping[str, Rule] = dict(rules)
