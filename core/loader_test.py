@@ -78,12 +78,12 @@ class LoaderTest(unittest.TestCase):
             (
                 r'''
                     lexer_rule = "abc";
-                    a -> b;
+                    a -> lexer_rule;
                 ''',
                 parser.Parser(
                     'a',
                     {
-                        'a': parser.Ref('b'),
+                        'a': parser.Literal('lexer_rule'),
                     },
                     loader.load_lexer({
                         'lexer_rule': 'abc',

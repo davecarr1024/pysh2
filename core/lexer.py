@@ -71,12 +71,9 @@ class Lexer(stream_processor.Processor[_ResultValue, _Item]):
         assert result.rule_name is not None, result
         return Token(result.rule_name, Lexer._flatten_result_value(result))
 
-    def _is_token_result(self, result: Result) -> bool:
-        return result.rule_name in self.token_types
-
     def _token_stream_from_result(self, result: Result) -> TokenStream:
         token_results: Sequence[Result] = list(
-            result.where(self._is_token_result))
+            result.where(Result.rule_name_in(self.token_types)))
         return TokenStream(
             [
                 token for token in
@@ -93,9 +90,16 @@ class Lexer(stream_processor.Processor[_ResultValue, _Item]):
             [Ref(rule_name) for rule_name in rules.keys()])
         super().__init__(_ROOT_RULE_NAME, processor_rules)
 
+    def __repr__(self) -> str:
+        return f'Lexer({self.token_rules})'
+
+    @cached_property
+    def token_rules(self) -> Mapping[str, Rule]:
+        return {rule_name: rule for rule_name, rule in self.rules.items() if rule_name not in (_ROOT_RULE_NAME, _RULES_RULE_NAME)}
+
     @cached_property
     def token_types(self) -> Sequence[str]:
-        return [rule_name for rule_name in self.rules.keys() if rule_name not in (_ROOT_RULE_NAME, _RULES_RULE_NAME)]
+        return list(self.token_rules.keys())
 
     def apply(self, input: str) -> TokenStream:
         return self._token_stream_from_result(self.apply_root(load_state_value(input)).result)

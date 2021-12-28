@@ -29,7 +29,12 @@ class ParserTest(processor_test.ProcessorTest[parser.ResultValue, parser.StateVa
                     ResultAndStateMatcher(
                         ResultMatcher(
                             rule_name='a',
-                            value=parser.ResultValue('int', '1'),
+                            children=[
+                                ResultMatcher(
+                                    rule_name='int',
+                                    value=parser.ResultValue('int', '1'),
+                                ),
+                            ]
                         )
                     )
                 ),
@@ -43,7 +48,12 @@ class ParserTest(processor_test.ProcessorTest[parser.ResultValue, parser.StateVa
                     ResultAndStateMatcher(
                         ResultMatcher(
                             rule_name='a',
-                            value=parser.ResultValue('int', '1'),
+                            children=[
+                                ResultMatcher(
+                                    rule_name='int',
+                                    value=parser.ResultValue('int', '1'),
+                                ),
+                            ]
                         ),
                         parser.StateValue([lexer.Token('int', '2')])
                     )
@@ -70,10 +80,6 @@ class ParserTest(processor_test.ProcessorTest[parser.ResultValue, parser.StateVa
                 ),
                 ApplyRaisesCase(
                     parser.StateValue([lexer.Token('str', 'abc')]),
-                    parser.Error(
-                        msg="Literal(token_type='int') failed to match head Token(type='str', value='abc')",
-                        rule_name='a',
-                    )
                 ),
             ]
         )
