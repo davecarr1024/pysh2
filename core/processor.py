@@ -88,6 +88,15 @@ class ResultAndState(Generic[_ResultValueType, _StateValueType]):
     def with_rule_name(self, rule_name: str) -> 'ResultAndState[_ResultValueType,_StateValueType]':
         return ResultAndState[_ResultValueType, _StateValueType](self.result.with_rule_name(rule_name), self.state)
 
+    @staticmethod
+    def for_child(child: 'ResultAndState[_ResultValueType,_StateValueType]') -> 'ResultAndState[_ResultValueType,_StateValueType]':
+        return ResultAndState[_ResultValueType, _StateValueType](
+            Result[_ResultValueType](
+                children=[child.result],
+            ),
+            child.state
+        )
+
 
 class Rule(ABC, Generic[_ResultValueType, _StateValueType]):
     @abstractmethod
@@ -137,14 +146,9 @@ class Ref(Rule[_ResultValueType, _StateValueType]):
 
     def apply(self, state: State[_ResultValueType, _StateValueType]) -> ResultAndState[_ResultValueType, _StateValueType]:
         try:
-            child_result: ResultAndState[_ResultValueType, _StateValueType] = state.processor.apply_rule_to_state(
+            child_result = state.processor.apply_rule_to_state(
                 self.rule_name, state)
-            return ResultAndState[_ResultValueType, _StateValueType](
-                Result[_ResultValueType](
-                    children=[child_result.result],
-                ),
-                child_result.state
-            )
+            return ResultAndState[_ResultValueType, _StateValueType].for_child(child_result)
         except Error as error:
             raise Error(children=[error])
 
@@ -171,26 +175,12 @@ class Or(Rule[_ResultValueType, _StateValueType]):
 
     def apply(self, state: State[_ResultValueType, _StateValueType]) -> ResultAndState[_ResultValueType, _StateValueType]:
         child_errors: MutableSequence[Error] = []
-        child_results: MutableSequence[ResultAndState[_ResultValueType, _StateValueType]] = [
-        ]
         for child in self.children:
             try:
-                child_results.append(child.apply(state))
+                return ResultAndState[_ResultValueType, _StateValueType].for_child(child.apply(state))
             except Error as error:
                 child_errors.append(error)
-        if len(child_results) > 1:
-            raise Error(msg=f'ambiguous or result {child_results}')
-        elif not child_results:
-            raise Error(children=child_errors)
-        else:
-            child_result: ResultAndState[_ResultValueType,
-                                         _StateValueType] = child_results[0]
-            return ResultAndState[_ResultValueType, _StateValueType](
-                Result[_ResultValueType](
-                    children=[child_result.result]
-                ),
-                child_result.state
-            )
+        raise Error(children=child_errors)
 
 
 @ dataclass(frozen=True)
@@ -239,14 +229,7 @@ class ZeroOrOne(Rule[_ResultValueType, _StateValueType]):
 
     def apply(self, state: State[_ResultValueType, _StateValueType]) -> ResultAndState[_ResultValueType, _StateValueType]:
         try:
-            child_result: ResultAndState[_ResultValueType,
-                                         _StateValueType] = self.child.apply(state)
-            return ResultAndState[_ResultValueType, _StateValueType](
-                Result[_ResultValueType](
-                    children=[child_result.result]
-                ),
-                child_result.state
-            )
+            return ResultAndState[_ResultValueType, _StateValueType].for_child(self.child.apply(state))
         except Error:
             return ResultAndState[_ResultValueType, _StateValueType](Result[_ResultValueType](), state)
 

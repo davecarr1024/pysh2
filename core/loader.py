@@ -16,9 +16,8 @@ def lexer_rule(input: str) -> lexer.Rule:
         {
             'root':   parser.UntilEmpty(parser.Ref('rule')),
             'rule': parser.Or([
-                parser.Ref('literal'),
-                parser.Ref('paren_rule'),
                 parser.Ref('zero_or_more'),
+                parser.Ref('operand'),
             ]),
             'literal': parser.Literal('literal'),
             'paren_rule': parser.And([
