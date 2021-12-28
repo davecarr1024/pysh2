@@ -3,7 +3,7 @@ from typing import Callable, Mapping, MutableMapping, MutableSequence
 
 
 def lexer_rule(input: str) -> lexer.Rule:
-    operators = '()[]+?*-'
+    operators = '()[-]+?*!^|'
     operator_rules: Mapping[str, lexer.Rule] = {
         operator:
         lexer.Literal(operator) for operator in operators}
@@ -16,11 +16,21 @@ def lexer_rule(input: str) -> lexer.Rule:
         {
             'root':   parser.UntilEmpty(parser.Ref('rule')),
             'rule': parser.Or([
-                parser.Ref('zero_or_more'),
+                parser.Ref('operation'),
                 parser.Ref('operand'),
             ]),
+            'operation': parser.Or([
+                parser.Ref('zero_or_more'),
+                parser.Ref('one_or_more'),
+                parser.Ref('zero_or_one'),
+                parser.Ref('until_empty'),
+                parser.Ref('unary_operation'),
+            ]),
+            'unary_operation': parser.Or([
+                parser.Ref('not'),
+            ]),
             'literal': parser.Literal('literal'),
-            'paren_rule': parser.And([
+            'and': parser.And([
                 parser.Literal('('),
                 parser.OneOrMore(parser.Ref('rule')),
                 parser.Literal(')'),
@@ -29,17 +39,52 @@ def lexer_rule(input: str) -> lexer.Rule:
                 parser.Ref('operand'),
                 parser.Literal('*'),
             ]),
+            'one_or_more': parser.And([
+                parser.Ref('operand'),
+                parser.Literal('+'),
+            ]),
+            'zero_or_one': parser.And([
+                parser.Ref('operand'),
+                parser.Literal('?'),
+            ]),
+            'until_empty': parser.And([
+                parser.Ref('operand'),
+                parser.Literal('!'),
+            ]),
+            'not': parser.And([
+                parser.Literal('^'),
+                parser.Ref('unary_operand'),
+            ]),
             'operand': parser.Or([
+                parser.Ref('and'),
+                parser.Ref('or'),
+                parser.Ref('unary_operand'),
+            ]),
+            'unary_operand': parser.Or([
                 parser.Ref('literal'),
-                parser.Ref('paren_rule'),
+                parser.Ref('class'),
+            ]),
+            'class': parser.And([
+                parser.Literal('['),
+                parser.Ref('literal'),
+                parser.Literal('-'),
+                parser.Ref('literal'),
+                parser.Literal(']'),
+            ]),
+            'or': parser.And([
+                parser.Literal('('),
+                parser.Ref('rule'),
+                parser.OneOrMore(
+                    parser.And([
+                        parser.Literal('|'),
+                        parser.Ref('rule'),
+                    ])
+                ),
+                parser.Literal(')'),
             ]),
         },
         lexer_lexer
     )
-    try:
-        result = lexer_parser.apply(input)
-    except parser.Error as error:
-        raise error
 
     def load_literal(result: parser.Result) -> lexer.Rule:
         assert result.rule_name == 'literal' and result.value is not None
@@ -51,19 +96,33 @@ def lexer_rule(input: str) -> lexer.Rule:
             children.append(load_rule(rule))
         return lexer.And(children)
 
-    def load_zero_or_more(result: parser.Result) -> lexer.Rule:
-        return lexer.ZeroOrMore(load_rule(result.where_one(parser.Result.rule_name_is('operand'))))
+    def load_or(result: parser.Result) -> lexer.Rule:
+        return lexer.Or([load_rule(rule) for rule in result.where(parser.Result.rule_name_is('rule'))])
+
+    def load_operation(factory: Callable[[lexer.Rule], lexer.Rule]) -> Callable[[parser.Result], lexer.Rule]:
+        return lambda result: factory(load_rule(result.where_one(parser.Result.rule_name_in(('operand', 'unary_operand')))))
+
+    def load_class(result: parser.Result) -> lexer.Rule:
+        min, max = result.where(parser.Result.rule_name_is('literal'))
+        assert min.value is not None and max.value is not None
+        return lexer.Class(min.value.value, max.value.value)
 
     rule_funcs: Mapping[str, Callable[[parser.Result], lexer.Rule]] = {
         'literal': load_literal,
-        'paren_rule': load_and,
-        'zero_or_more': load_zero_or_more,
+        'and': load_and,
+        'or': load_or,
+        'zero_or_more': load_operation(lexer.ZeroOrMore),
+        'one_or_more': load_operation(lexer.OneOrMore),
+        'zero_or_one': load_operation(lexer.ZeroOrOne),
+        'until_empty': load_operation(lexer.UntilEmpty),
+        'not': load_operation(lexer.Not),
+        'class': load_class,
     }
 
     def load_rule(result: parser.Result) -> lexer.Rule:
         rule_result = result.where_one(
-            lambda result: result.rule_name in rule_funcs.keys())
+            parser.Result.rule_name_in(list(rule_funcs.keys())))
         assert rule_result.rule_name is not None
         return rule_funcs[rule_result.rule_name](rule_result)
 
-    return load_and(result)
+    return load_and(lexer_parser.apply(input))

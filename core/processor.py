@@ -43,7 +43,7 @@ class Result(Generic[_ResultValueType]):
         result: Result[_ResultValueType] = self.where(pred)
         if len(result.children) != n:
             raise Error(
-                msg=f'result count mismatch expected {n} got {len(result.children)}')
+                msg=f'result count mismatch expected {n} got {len(result.children)} in {result} from {self}')
         return result
 
     def where_one(self, pred: Callable[['Result[_ResultValueType]'], bool]) -> 'Result[_ResultValueType]':
@@ -52,6 +52,10 @@ class Result(Generic[_ResultValueType]):
     @staticmethod
     def rule_name_is(rule_name: str) -> Callable[['Result[_ResultValueType]'], bool]:
         return lambda result: result.rule_name == rule_name
+
+    @staticmethod
+    def rule_name_in(rule_names: Sequence[str]) -> Callable[['Result[_ResultValueType]'], bool]:
+        return lambda result: result.rule_name in rule_names
 
     def has_value(self) -> bool:
         return self.value is not None
@@ -134,7 +138,14 @@ class Error(Exception):
     msg: Optional[str] = field(default=None, kw_only=True)
     children: Sequence['Error'] = field(default_factory=list, kw_only=True)
 
-    def __str__(self) -> str: return repr(self)
+    def __str__(self) -> str:
+        return '\n' + self._str(0)
+
+    def _str(self, indent: int) -> str:
+        if not self.rule_name and not self.msg and len(self.children) == 1:
+            return self.children[0]._str(indent)
+        return (f'{"  "*indent}{self.rule_name if self.rule_name else ""} {self.msg if self.msg else ""}'
+                + '\n' + ''.join([child._str(indent+1) for child in self.children]))
 
     def with_rule_name(self, rule_name: str) -> 'Error':
         return Error(msg=self.msg, rule_name=rule_name, children=self.children)

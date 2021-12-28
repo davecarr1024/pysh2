@@ -64,14 +64,14 @@ class ParserTest(processor_test.ProcessorTest[parser.ResultValue, parser.StateVa
                 ApplyRaisesCase(
                     parser.StateValue([]),
                     parser.Error(
-                        msg='state empty',
+                        msg='stream empty',
                         rule_name='a',
                     )
                 ),
                 ApplyRaisesCase(
                     parser.StateValue([lexer.Token('str', 'abc')]),
                     parser.Error(
-                        msg='literal mismatch expected int got str',
+                        msg="Literal(token_type='int') failed to match head Token(type='str', value='abc')",
                         rule_name='a',
                     )
                 ),

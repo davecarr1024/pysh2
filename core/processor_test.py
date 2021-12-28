@@ -3,7 +3,7 @@ from functools import cached_property
 from typing import Generic, Optional, Sequence, TypeVar
 import unittest
 
-from . import processor
+from core import processor
 
 if 'unittest.util' in __import__('sys').modules:
     # Show full diff in self.assertEqual.

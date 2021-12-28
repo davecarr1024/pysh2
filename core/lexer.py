@@ -2,57 +2,38 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import Mapping, MutableMapping, Sequence
 
-from core import processor
+from core import processor, stream_processor
+
+Error = stream_processor.Error
 
 
 @dataclass(frozen=True)
-class ResultValue(processor.ResultValue):
+class _ResultValue(processor.ResultValue):
     value: str
 
 
 @dataclass(frozen=True)
-class StateValue(processor.StateValue):
-    input: str
-    pos: int = 0
+class _Item:
+    value: str
 
-    @property
-    def empty(self) -> bool:
-        return self.pos >= len(self.input)
-
-    @cached_property
-    def head(self) -> str:
-        assert not self.empty
-        return self.input[self.pos]
-
-    @cached_property
-    def tail(self) -> 'StateValue':
-        assert not self.empty
-        return StateValue(self.input, self.pos+1)
+    def __post_init__(self):
+        if len(self.value) != 1:
+            raise Error(msg=f'invalid lexer item {self.value}')
 
 
-Error = processor.Error
-
-Rule = processor.Rule[ResultValue, StateValue]
-
-Ref = processor.Ref[ResultValue, StateValue]
-
-And = processor.And[ResultValue, StateValue]
-
-Or = processor.Or[ResultValue, StateValue]
-
-ZeroOrMore = processor.ZeroOrMore[ResultValue, StateValue]
-
-OneOrMore = processor.OneOrMore[ResultValue, StateValue]
-
-ZeroOrOne = processor.ZeroOrOne[ResultValue, StateValue]
-
-Result = processor.Result[ResultValue]
-
-State = processor.State[ResultValue, StateValue]
-
-ResultAndState = processor.ResultAndState[ResultValue, StateValue]
-
-UntilEmpty = processor.UntilEmpty[ResultValue, StateValue]
+Result = stream_processor.Result[_ResultValue]
+StateValue = stream_processor.Stream[_Item]
+State = stream_processor.State[_ResultValue, _Item]
+ResultAndState = stream_processor.ResultAndState[_ResultValue, _Item]
+Rule = stream_processor.Rule[_ResultValue, _Item]
+HeadRule = stream_processor.HeadRule[_ResultValue, _Item]
+Ref = stream_processor.Ref[_ResultValue, _Item]
+And = stream_processor.And[_ResultValue, _Item]
+Or = stream_processor.Or[_ResultValue, _Item]
+ZeroOrMore = stream_processor.ZeroOrMore[_ResultValue, _Item]
+OneOrMore = stream_processor.OneOrMore[_ResultValue, _Item]
+ZeroOrOne = stream_processor.ZeroOrOne[_ResultValue, _Item]
+UntilEmpty = stream_processor.UntilEmpty[_ResultValue, _Item]
 
 
 @dataclass(frozen=True)
@@ -61,31 +42,18 @@ class Token(processor.ResultValue):
     value: str
 
 
-@dataclass(frozen=True)
-class TokenStream(processor.StateValue):
-    tokens: Sequence[Token]
-
-    @property
-    def empty(self) -> bool:
-        return not self.tokens
-
-    @cached_property
-    def head(self) -> Token:
-        assert not self.empty
-        return self.tokens[0]
-
-    @cached_property
-    def tail(self) -> 'TokenStream':
-        assert not self.empty
-        return TokenStream(self.tokens[1:])
-
+TokenStream = stream_processor.Stream[Token]
 
 _ROOT_RULE_NAME = '_root'
 _RULES_RULE_NAME = '_rules'
 
 
+def load_state_value(s: str) -> StateValue:
+    return StateValue([_Item(c) for c in s])
+
+
 @dataclass(frozen=True, init=False)
-class Lexer(processor.Processor[ResultValue, StateValue]):
+class Lexer(stream_processor.Processor[_ResultValue, _Item]):
     @staticmethod
     def _flatten_result_value(result: Result) -> str:
         value: str = ''
@@ -120,24 +88,27 @@ class Lexer(processor.Processor[ResultValue, StateValue]):
         return [rule_name for rule_name in self.rules.keys() if rule_name not in (_ROOT_RULE_NAME, _RULES_RULE_NAME)]
 
     def apply(self, input: str) -> TokenStream:
-        return self._token_stream_from_result(self.apply_root(StateValue(input)).result)
+        return self._token_stream_from_result(self.apply_root(load_state_value(input)).result)
 
 
 @dataclass(frozen=True)
-class Literal(Rule):
-    value: str
+class Class(HeadRule):
+    min: str
+    max: str
 
-    def apply(self, state: State) -> ResultAndState:
-        if state.value.empty:
-            raise Error(msg=f'state empty')
-        elif self.value == state.value.head:
-            return ResultAndState(
-                Result(value=ResultValue(self.value)),
-                state.with_value(state.value.tail)
-            )
-        else:
-            raise Error(
-                msg=f'literal mismatch expected {repr(self.value)} got {repr(state.value.head)}')
+    def pred(self, head: _Item) -> bool:
+        return self.min <= head.value <= self.max
+
+    def result(self, head: _Item) -> Result:
+        return Result(value=_ResultValue(head.value))
+
+
+class Literal(stream_processor.Literal[_ResultValue, _Item]):
+    def __init__(self, value: str):
+        super().__init__(_Item(value))
+
+    def result(self, head: _Item) -> Result:
+        return Result(value=_ResultValue(head.value))
 
 
 @dataclass(frozen=True)
@@ -151,7 +122,7 @@ class Not(Rule):
             child_result: ResultAndState = self.child.apply(state)
         except Error:
             return ResultAndState(
-                Result(value=ResultValue(state.value.head)),
+                Result(value=_ResultValue(state.value.head.value)),
                 state.with_value(state.value.tail)
             )
         raise Error(msg=f'child applied: {child_result}')

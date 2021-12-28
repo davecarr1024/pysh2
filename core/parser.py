@@ -1,53 +1,51 @@
 from dataclasses import dataclass
 
-from core import lexer, processor
+from core import lexer, stream_processor
 
 
-ResultValue = lexer.Token
+ResultValue = _Item = lexer.Token
+
 
 StateValue = lexer.TokenStream
 
-Result = processor.Result[ResultValue]
+Result = stream_processor.Result[ResultValue]
 
-State = processor.State[ResultValue, StateValue]
+State = stream_processor.State[ResultValue, _Item]
 
-ResultAndState = processor.ResultAndState[ResultValue, StateValue]
+ResultAndState = stream_processor.ResultAndState[ResultValue, _Item]
 
-Error = processor.Error
+Error = stream_processor.Error
 
-Rule = processor.Rule[ResultValue, StateValue]
+Rule = stream_processor.Rule[ResultValue, _Item]
 
-Ref = processor.Ref[ResultValue, StateValue]
+Ref = stream_processor.Ref[ResultValue, _Item]
 
-And = processor.And[ResultValue, StateValue]
+And = stream_processor.And[ResultValue, _Item]
 
-Or = processor.Or[ResultValue, StateValue]
+Or = stream_processor.Or[ResultValue, _Item]
 
-ZeroOrMore = processor.ZeroOrMore[ResultValue, StateValue]
+ZeroOrMore = stream_processor.ZeroOrMore[ResultValue, _Item]
 
-OneOrMore = processor.OneOrMore[ResultValue, StateValue]
+OneOrMore = stream_processor.OneOrMore[ResultValue, _Item]
 
-ZeroOrOne = processor.ZeroOrOne[ResultValue, StateValue]
+ZeroOrOne = stream_processor.ZeroOrOne[ResultValue, _Item]
 
-UntilEmpty = processor.UntilEmpty[ResultValue, StateValue]
-
-
-@dataclass(frozen=True)
-class Literal(Rule):
-    value: str
-
-    def apply(self, state: State) -> ResultAndState:
-        if state.value.empty:
-            raise Error(msg='state empty')
-        elif state.value.head.type == self.value:
-            return ResultAndState(Result(value=state.value.head), state.with_value(state.value.tail))
-        else:
-            raise Error(
-                msg=f'literal mismatch expected {self.value} got {state.value.head.type}')
+UntilEmpty = stream_processor.UntilEmpty[ResultValue, _Item]
 
 
 @dataclass(frozen=True)
-class Parser(processor.Processor[ResultValue, StateValue]):
+class Literal(stream_processor.HeadRule[ResultValue, _Item]):
+    token_type: str
+
+    def pred(self, head: _Item) -> bool:
+        return head.type == self.token_type
+
+    def result(self, head: _Item) -> Result:
+        return Result(value=head)
+
+
+@dataclass(frozen=True)
+class Parser(stream_processor.Processor[ResultValue, _Item]):
     lexer: lexer.Lexer
 
     def apply(self, input: str) -> Result:
