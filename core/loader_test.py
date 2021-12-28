@@ -222,6 +222,18 @@ class LoaderTest(unittest.TestCase):
                     loader.load_lexer({})
                 )
             ),
+            (
+                r'''
+                    a -> "b";
+                ''',
+                parser.Parser(
+                    'a',
+                    {
+                        'a': parser.Literal('b'),
+                    },
+                    loader.load_lexer({'b': 'b'})
+                )
+            ),
         ]:
             with self.subTest((input, parser_)):
                 self.assertEqual(parser_, loader.load_parser(input))

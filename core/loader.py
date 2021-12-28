@@ -206,6 +206,7 @@ def load_parser(input: str) -> parser.Parser:
             'unary_operand': parser.Or([
                 parser.Ref('ref'),
                 parser.Ref('paren_rule'),
+                parser.Ref('lexer_literal'),
             ]),
             'or': parser.And([
                 parser.Ref('operand'),
@@ -243,6 +244,7 @@ def load_parser(input: str) -> parser.Parser:
                 parser.Ref('unary_operand'),
                 parser.Literal('!'),
             ]),
+            'lexer_literal': parser.Literal('str'),
         },
         parser_lexer
     )
@@ -255,6 +257,16 @@ def load_parser(input: str) -> parser.Parser:
     lexer_rules: MutableMapping[str, lexer.Rule] = {}
     parser_rules: MutableMapping[str, parser.Rule] = {}
     root_rule_name: Optional[str] = None
+
+    def load_lexer_literal(result: parser.Result) -> parser.Rule:
+        value: str = result.where_one(
+            parser.Result.rule_name_is('str')).get_value().value.strip('"')
+        if value in lexer_rules:
+            assert lexer_rules[value] == load_lexer_rule(
+                value), (value, lexer_rules[value])
+        else:
+            lexer_rules[value] = load_lexer_rule(value)
+        return parser.Literal(value)
 
     def load_unary_operation(factory: Callable[[parser.Rule], parser.Rule]) -> Callable[[parser.Result], parser.Rule]:
         return lambda result: factory(load_rule(result.where_one(parser.Result.rule_name_is('unary_operand'))))
@@ -289,6 +301,7 @@ def load_parser(input: str) -> parser.Parser:
             'one_or_more': load_one_or_more,
             'zero_or_one': load_zero_or_one,
             'until_empty': load_until_empty,
+            'lexer_literal': load_lexer_literal,
         }
         rule_result = result.where_one(
             parser.Result.rule_name_in(list(rule_loaders.keys())))
