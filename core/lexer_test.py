@@ -1,38 +1,24 @@
-from dataclasses import dataclass
 from typing import Sequence
 from unittest import TestCase
 
 from . import lexer
 
 
-@dataclass(frozen=True)
-class StartsWith(lexer.Rule):
-    value: str
+# TODO StartsWithTest(RuleTest)
 
-    def apply(self, state: lexer.State) -> lexer.ResultAndState:
-        if state.value.startswith(self.value):
-            result_value: lexer.ResultValue = lexer.ResultValue(self.value)
-            return lexer.ResultAndState(lexer.Result(self, result_value, []), state.after(result_value))
-        raise lexer.RuleError(self, state)
-
+# TODO NotTest(RuleTest)
 
 class StateTest(TestCase):
     def test_empty(self):
-        self.assertTrue(lexer.State('').empty)
-        self.assertFalse(lexer.State('foo').empty)
+        self.assertTrue(lexer.StateValue('').empty)
+        self.assertFalse(lexer.StateValue('abc').empty)
 
-    def test_value(self):
-        self.assertEqual('foo', lexer.State('foo').value)
-        self.assertEqual('bar', lexer.State('foobar', 3).value)
+    def test_head(self):
+        self.assertEqual('a', lexer.StateValue('abc').head)
 
-    def test_with_pos(self):
-        self.assertEqual(10, lexer.State('').with_pos(10).pos)
-
-    def test_after(self):
-        self.assertEqual(lexer.State('foobar', 3), lexer.State(
-            'foobar').after(lexer.ResultValue('foo')))
-        with self.assertRaises(ValueError):
-            lexer.State('foobar').after(lexer.ResultValue('baz'))
+    def test_tail(self):
+        self.assertEqual(lexer.StateValue('abc', 1),
+                         lexer.StateValue('abc').tail)
 
 
 class TokenStreamTest(TestCase):
@@ -63,10 +49,11 @@ class LexerTest(TestCase):
             ('cc', [lexer.Token('b', 'cc')]),
             ('acc', [lexer.Token('a', 'a'), lexer.Token('b', 'cc')]),
         ]:
-            self.assertEqual(
-                lexer.Lexer([
-                    StartsWith('a', 'a'),
-                    lexer.OneOrMore('b', StartsWith(None, 'c')),
-                ]).apply(input),
-                lexer.TokenStream(output)
-            )
+            with self.subTest((input, output)):
+                self.assertEqual(
+                    lexer.Lexer({
+                        'a': lexer.StartsWith('a'),
+                        'b': lexer.OneOrMore(lexer.StartsWith('c')),
+                    }).apply(input),
+                    lexer.TokenStream(output)
+                )

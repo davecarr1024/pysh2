@@ -47,4 +47,4 @@ class Parser(processor.Processor[ResultValue, State]):
     lexer: lexer.Lexer
 
     def apply(self, input: str) -> Result:
-        return self._apply(self.lexer.apply(input))
+        return self.apply_root(self.lexer.apply(input)).result
