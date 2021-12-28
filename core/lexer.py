@@ -91,7 +91,7 @@ class Lexer(processor.Processor[ResultValue, StateValue]):
         value: str = ''
         if result.value is not None:
             value += result.value.value
-        for child in result.children:
+        for child in result:
             value += Lexer._flatten_result_value(child)
         return value
 
@@ -104,8 +104,8 @@ class Lexer(processor.Processor[ResultValue, StateValue]):
         return result.rule_name in self.token_types
 
     def _token_stream_from_result(self, result: Result) -> TokenStream:
-        token_results: Sequence[Result] = result.where(
-            self._is_token_result).children
+        token_results: Sequence[Result] = list(
+            result.where(self._is_token_result))
         return TokenStream([Lexer._token_from_result(token_result) for token_result in token_results])
 
     def __init__(self, rules: Mapping[str, Rule]):
@@ -124,7 +124,7 @@ class Lexer(processor.Processor[ResultValue, StateValue]):
 
 
 @dataclass(frozen=True)
-class StartsWith(Rule):
+class Literal(Rule):
     value: str
 
     def apply(self, state: State) -> ResultAndState:
@@ -137,7 +137,7 @@ class StartsWith(Rule):
             )
         else:
             raise Error(
-                msg=f'startswith mismatch expected {repr(self.value)} got {repr(state.value.head)}')
+                msg=f'literal mismatch expected {repr(self.value)} got {repr(state.value.head)}')
 
 
 @dataclass(frozen=True)

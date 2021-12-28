@@ -17,6 +17,8 @@ Error = processor.Error
 
 Rule = processor.Rule[ResultValue, StateValue]
 
+Ref = processor.Ref[ResultValue, StateValue]
+
 And = processor.And[ResultValue, StateValue]
 
 Or = processor.Or[ResultValue, StateValue]

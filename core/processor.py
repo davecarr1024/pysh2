@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod, abstractproperty
 from dataclasses import dataclass, field
-from typing import Callable, Generic, Mapping, MutableSequence, Optional, Sequence, TypeVar
+from typing import Callable, Generic, Iterator, Mapping, MutableSequence, Optional, Sequence, TypeVar
 
 
 class ResultValue:
@@ -16,6 +16,9 @@ class Result(Generic[_ResultValueType]):
     value: Optional[_ResultValueType] = field(kw_only=True, default=None)
     children: Sequence['Result[_ResultValueType]'] = field(
         kw_only=True, default_factory=lambda: list[Result[_ResultValueType]]())
+
+    def __iter__(self) -> Iterator['Result[_ResultValueType]']:
+        return self.children.__iter__()
 
     def with_rule_name(self, rule_name: str) -> 'Result[_ResultValueType]':
         return Result[_ResultValueType](value=self.value, children=self.children, rule_name=rule_name)
@@ -118,9 +121,11 @@ class Processor(Generic[_ResultValueType, _StateValueType]):
 
 @dataclass(frozen=True)
 class Error(Exception):
-    msg: Optional[str] = field(default=None, kw_only=True)
     rule_name: Optional[str] = field(default=None, kw_only=True)
+    msg: Optional[str] = field(default=None, kw_only=True)
     children: Sequence['Error'] = field(default_factory=list, kw_only=True)
+
+    def __str__(self) -> str: return repr(self)
 
     def with_rule_name(self, rule_name: str) -> 'Error':
         return Error(msg=self.msg, rule_name=rule_name, children=self.children)

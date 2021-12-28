@@ -4,7 +4,7 @@ from unittest import TestCase
 from . import lexer
 
 
-# TODO StartsWithTest(RuleTest)
+# TODO LiteralTest(RuleTest)
 
 # TODO NotTest(RuleTest)
 
@@ -52,8 +52,8 @@ class LexerTest(TestCase):
             with self.subTest((input, output)):
                 self.assertEqual(
                     lexer.Lexer({
-                        'a': lexer.StartsWith('a'),
-                        'b': lexer.OneOrMore(lexer.StartsWith('c')),
+                        'a': lexer.Literal('a'),
+                        'b': lexer.OneOrMore(lexer.Literal('c')),
                     }).apply(input),
                     lexer.TokenStream(output)
                 )
