@@ -73,5 +73,8 @@ class HeadRule(Rule[_ResultValueType, _ItemType], ABC):
 class Literal(HeadRule[_ResultValueType, _ItemType]):
     value: _ItemType
 
+    def __repr__(self) -> str:
+        return str(self.value)
+
     def pred(self, head: _ItemType) -> bool:
         return self.value == head

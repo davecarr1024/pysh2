@@ -16,6 +16,9 @@ class _ResultValue(processor.ResultValue):
 class _Item:
     value: str
 
+    def __repr__(self) -> str:
+        return repr(self.value)
+
     def __post_init__(self):
         if len(self.value) != 1:
             raise Error(msg=f'invalid lexer item {self.value}')
@@ -103,6 +106,9 @@ class Class(HeadRule):
     min: str
     max: str
 
+    def __repr__(self) -> str:
+        return f'[{self.min}-{self.max}]'
+
     def pred(self, head: _Item) -> bool:
         return self.min <= head.value <= self.max
 
@@ -121,6 +127,9 @@ class Literal(stream_processor.Literal[_ResultValue, _Item]):
 @dataclass(frozen=True)
 class Not(Rule):
     child: Rule
+
+    def __repr__(self) -> str:
+        return f'^{self.child}'
 
     def apply(self, state: State) -> ResultAndState:
         if state.value.empty:

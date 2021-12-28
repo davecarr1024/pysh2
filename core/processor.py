@@ -63,6 +63,10 @@ class Result(Generic[_ResultValueType]):
     def has_rule_name(self) -> bool:
         return self.rule_name is not None
 
+    def get_value(self) -> _ResultValueType:
+        assert self.value is not None, self
+        return self.value
+
 
 class StateValue(ABC):
     @abstractproperty
@@ -155,6 +159,9 @@ class Error(Exception):
 class Ref(Rule[_ResultValueType, _StateValueType]):
     rule_name: str
 
+    def __repr__(self) -> str:
+        return self.rule_name
+
     def apply(self, state: State[_ResultValueType, _StateValueType]) -> ResultAndState[_ResultValueType, _StateValueType]:
         try:
             child_result = state.processor.apply_rule_to_state(
@@ -168,6 +175,9 @@ class Ref(Rule[_ResultValueType, _StateValueType]):
 class And(Rule[_ResultValueType, _StateValueType]):
     children: Sequence[Rule[_ResultValueType, _StateValueType]]
 
+    def __repr__(self) -> str:
+        return f'({" ".join([str(child) for child in self.children])})'
+
     def apply(self, state: State[_ResultValueType, _StateValueType]) -> ResultAndState[_ResultValueType, _StateValueType]:
         child_results: MutableSequence[Result[_ResultValueType]] = [
         ]
@@ -180,9 +190,12 @@ class And(Rule[_ResultValueType, _StateValueType]):
         return ResultAndState[_ResultValueType, _StateValueType](Result[_ResultValueType](children=child_results), child_state)
 
 
-@ dataclass(frozen=True, repr=False)
+@dataclass(frozen=True)
 class Or(Rule[_ResultValueType, _StateValueType]):
     children: Sequence[Rule[_ResultValueType, _StateValueType]]
+
+    def __repr__(self) -> str:
+        return f'({"|".join([str(child) for child in self.children])})'
 
     def apply(self, state: State[_ResultValueType, _StateValueType]) -> ResultAndState[_ResultValueType, _StateValueType]:
         child_errors: MutableSequence[Error] = []
@@ -197,6 +210,9 @@ class Or(Rule[_ResultValueType, _StateValueType]):
 @ dataclass(frozen=True)
 class ZeroOrMore(Rule[_ResultValueType, _StateValueType]):
     child: Rule[_ResultValueType, _StateValueType]
+
+    def __repr__(self) -> str:
+        return f'{self.child}*'
 
     def apply(self, state: State[_ResultValueType, _StateValueType]) -> ResultAndState[_ResultValueType, _StateValueType]:
         child_results: MutableSequence[Result[_ResultValueType]] = [
@@ -216,6 +232,9 @@ class ZeroOrMore(Rule[_ResultValueType, _StateValueType]):
 @ dataclass(frozen=True)
 class OneOrMore(Rule[_ResultValueType, _StateValueType]):
     child: Rule[_ResultValueType, _StateValueType]
+
+    def __repr__(self) -> str:
+        return f'{self.child}+'
 
     def apply(self, state: State[_ResultValueType, _StateValueType]) -> ResultAndState[_ResultValueType, _StateValueType]:
         child_result: ResultAndState[_ResultValueType,
@@ -238,6 +257,9 @@ class OneOrMore(Rule[_ResultValueType, _StateValueType]):
 class ZeroOrOne(Rule[_ResultValueType, _StateValueType]):
     child: Rule[_ResultValueType, _StateValueType]
 
+    def __repr__(self) -> str:
+        return f'{self.child}?'
+
     def apply(self, state: State[_ResultValueType, _StateValueType]) -> ResultAndState[_ResultValueType, _StateValueType]:
         try:
             return ResultAndState[_ResultValueType, _StateValueType].for_child(self.child.apply(state))
@@ -248,6 +270,9 @@ class ZeroOrOne(Rule[_ResultValueType, _StateValueType]):
 @ dataclass(frozen=True)
 class UntilEmpty(Rule[_ResultValueType, _StateValueType]):
     child: Rule[_ResultValueType, _StateValueType]
+
+    def __repr__(self) -> str:
+        return f'{self.child}!'
 
     def apply(self, state: State[_ResultValueType, _StateValueType]) -> ResultAndState[_ResultValueType, _StateValueType]:
         child_state: State[_ResultValueType, _StateValueType] = state

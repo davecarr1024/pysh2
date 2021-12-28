@@ -1,6 +1,10 @@
 import unittest
 
-from core import lexer, loader
+from core import lexer, loader, parser
+
+if 'unittest.util' in __import__('sys').modules:
+    # Show full diff in self.assertEqual.
+    __import__('sys').modules['unittest.util']._MAX_LENGTH = 999999999
 
 
 class LoaderTest(unittest.TestCase):
@@ -53,4 +57,39 @@ class LoaderTest(unittest.TestCase):
             ('\\n', lexer.And([lexer.Literal('\n')])),
         ]:
             with self.subTest((input, rule)):
-                self.assertEqual(rule, loader.lexer_rule(input))
+                self.assertEqual(rule, loader.load_lexer_rule(input))
+
+    def test_load_parser(self):
+        input: str
+        parser_: parser.Parser
+        for input, parser_ in [
+            (
+                r'''
+                    a -> b;
+                ''',
+                parser.Parser(
+                    'a',
+                    {
+                        'a': parser.Ref('b'),
+                    },
+                    loader.load_lexer({})
+                )
+            ),
+            (
+                r'''
+                    lexer_rule = "abc";
+                    a -> b;
+                ''',
+                parser.Parser(
+                    'a',
+                    {
+                        'a': parser.Ref('b'),
+                    },
+                    loader.load_lexer({
+                        'lexer_rule': 'abc',
+                    })
+                )
+            ),
+        ]:
+            with self.subTest((input, parser_)):
+                self.assertEqual(parser_, loader.load_parser(input))

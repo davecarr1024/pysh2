@@ -42,6 +42,12 @@ class HeadRule(stream_processor.HeadRule[ResultValue, _Item]):
 class Literal(HeadRule):
     token_type: str
 
+    def __repr__(self) -> str:
+        return self.token_type
+
+    def apply(self, state: State) -> ResultAndState:
+        return ResultAndState.for_child(super().apply(state).with_rule_name(self.token_type))
+
     def pred(self, head: _Item) -> bool:
         return head.type == self.token_type
 
