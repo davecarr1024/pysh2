@@ -1,5 +1,5 @@
-from core import lexer, parser
-from typing import Callable, Mapping, MutableMapping, MutableSequence, Optional
+from core import lexer, parser, processor
+from typing import Callable, Mapping, MutableMapping, MutableSequence, Optional, Sequence
 
 
 def load_lexer_rule(input: str) -> lexer.Rule:
@@ -149,7 +149,27 @@ def load_lexer(rules: Mapping[str, str]) -> lexer.Lexer:
 
 
 def load_parser(input: str) -> parser.Parser:
-    result = parser.Parser(
+    try:
+        parser_lexer: lexer.Lexer = load_lexer({
+            '_ws': r'\w+',
+            '=': '=',
+            ';': ';',
+            '->': r'\->',
+            '|': r'\|',
+            '(': r'\(',
+            ')': r'\)',
+            '*': r'\*',
+            '+': r'\+',
+            '?': r'\?',
+            '!': r'\!',
+            'id': '(_|[a-z]|[A-Z]|[0-9])+',
+            'str': '"(^")+"',
+        })
+    except processor.Error as error:
+        raise processor.Error(
+            msg='failed to load parser lexer', children=[error])
+
+    parser_parser: parser.Parser = parser.Parser(
         'root',
         {
             'root': parser.UntilEmpty(parser.Ref('line')),
@@ -170,23 +190,87 @@ def load_parser(input: str) -> parser.Parser:
             ]),
             'parser_rule_decl_name': parser.Literal('id'),
             'rule': parser.Or([
-                parser.Ref('ref'),
+                parser.Ref('or'),
+                parser.Ref('and'),
+                parser.Ref('operand'),
             ]),
             'ref': parser.Literal('id'),
+            'and': parser.And([
+                parser.Ref('operand'),
+                parser.OneOrMore(parser.Ref('operand')),
+            ]),
+            'operand': parser.Or([
+                parser.Ref('unary_operation'),
+                parser.Ref('unary_operand'),
+            ]),
+            'unary_operand': parser.Or([
+                parser.Ref('ref'),
+                parser.Ref('paren_rule'),
+            ]),
+            'or': parser.And([
+                parser.Ref('operand'),
+                parser.OneOrMore(
+                    parser.And([
+                        parser.Literal('|'),
+                        parser.Ref('operand'),
+                    ])
+                ),
+            ]),
+            'paren_rule': parser.And([
+                parser.Literal('('),
+                parser.Ref('rule'),
+                parser.Literal(')'),
+            ]),
+            'unary_operation': parser.Or([
+                parser.Ref('zero_or_more'),
+                parser.Ref('one_or_more'),
+                parser.Ref('zero_or_one'),
+                parser.Ref('until_empty'),
+            ]),
+            'zero_or_more': parser.And([
+                parser.Ref('unary_operand'),
+                parser.Literal('*'),
+            ]),
+            'one_or_more': parser.And([
+                parser.Ref('unary_operand'),
+                parser.Literal('+'),
+            ]),
+            'zero_or_one': parser.And([
+                parser.Ref('unary_operand'),
+                parser.Literal('?'),
+            ]),
+            'until_empty': parser.And([
+                parser.Ref('unary_operand'),
+                parser.Literal('!'),
+            ]),
         },
-        load_lexer({
-            '_ws': r'\w+',
-            '=': '=',
-            ';': ';',
-            '->': r'\->',
-            'id': '(_|[a-z]|[A-Z]|[0-9])+',
-            'str': '"(^")+"',
-        })
-    ).apply(input)
+        parser_lexer
+    )
+
+    try:
+        result: parser.Result = parser_parser.apply(input)
+    except processor.Error as error:
+        raise processor.Error(msg='failed to load parser', children=[error])
 
     lexer_rules: MutableMapping[str, lexer.Rule] = {}
     parser_rules: MutableMapping[str, parser.Rule] = {}
     root_rule_name: Optional[str] = None
+
+    def load_unary_operation(factory: Callable[[parser.Rule], parser.Rule]) -> Callable[[parser.Result], parser.Rule]:
+        return lambda result: factory(load_rule(result.where_one(parser.Result.rule_name_is('unary_operand'))))
+
+    load_zero_or_more = load_unary_operation(parser.ZeroOrMore)
+    load_one_or_more = load_unary_operation(parser.OneOrMore)
+    load_zero_or_one = load_unary_operation(parser.ZeroOrOne)
+    load_until_empty = load_unary_operation(parser.UntilEmpty)
+
+    def load_operation(factory: Callable[[Sequence[parser.Rule]], parser.Rule]) -> Callable[[parser.Result], parser.Rule]:
+        def closure(result: parser.Result) -> parser.Rule:
+            return factory([load_rule(rule) for rule in result.where(parser.Result.rule_name_is('operand'))])
+        return closure
+
+    load_or = load_operation(parser.Or)
+    load_and = load_operation(parser.And)
 
     def load_ref(result: parser.Result) -> parser.Rule:
         rule_name: str = result.where_one(
@@ -199,6 +283,12 @@ def load_parser(input: str) -> parser.Parser:
     def load_rule(result: parser.Result) -> parser.Rule:
         rule_loaders: Mapping[str, Callable[[parser.Result], parser.Rule]] = {
             'ref': load_ref,
+            'and': load_and,
+            'or': load_or,
+            'zero_or_more': load_zero_or_more,
+            'one_or_more': load_one_or_more,
+            'zero_or_one': load_zero_or_one,
+            'until_empty': load_until_empty,
         }
         rule_result = result.where_one(
             parser.Result.rule_name_in(list(rule_loaders.keys())))
@@ -237,9 +327,13 @@ def load_parser(input: str) -> parser.Parser:
         assert rule_result.rule_name is not None
         rule_loaders[rule_result.rule_name](rule_result)
 
-    for rule_result in result.where(parser.Result.rule_name_is('rule_decl')):
-        load_rule_decl(rule_result)
+    for rule_decl in result.where(parser.Result.rule_name_is('rule_decl')):
+        try:
+            load_rule_decl(rule_decl)
+        except processor.Error as error:
+            raise processor.Error(
+                msg=f'failed to {rule_decl}', children=[error])
 
-    assert root_rule_name is not None, (lexer_rules, parser_rules)
+    assert root_rule_name is not None, 'no root rule name'
 
     return parser.Parser(root_rule_name, parser_rules, lexer.Lexer(lexer_rules))

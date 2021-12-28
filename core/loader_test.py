@@ -90,6 +90,138 @@ class LoaderTest(unittest.TestCase):
                     })
                 )
             ),
+            (
+                r'''
+                    a -> b c;
+                ''',
+                parser.Parser(
+                    'a',
+                    {
+                        'a': parser.And([parser.Ref('b'), parser.Ref('c')]),
+                    },
+                    loader.load_lexer({})
+                )
+            ),
+            (
+                r'''
+                    a -> b | c;
+                ''',
+                parser.Parser(
+                    'a',
+                    {
+                        'a': parser.Or([parser.Ref('b'), parser.Ref('c')]),
+                    },
+                    loader.load_lexer({})
+                )
+            ),
+            (
+                r'''
+                    a -> (b);
+                ''',
+                parser.Parser(
+                    'a',
+                    {
+                        'a': parser.Ref('b'),
+                    },
+                    loader.load_lexer({})
+                )
+            ),
+            (
+                r'''
+                    a -> (b c);
+                ''',
+                parser.Parser(
+                    'a',
+                    {
+                        'a': parser.And([parser.Ref('b'), parser.Ref('c')]),
+                    },
+                    loader.load_lexer({})
+                )
+            ),
+            (
+                r'''
+                    a -> (b | c);
+                ''',
+                parser.Parser(
+                    'a',
+                    {
+                        'a': parser.Or([parser.Ref('b'), parser.Ref('c')]),
+                    },
+                    loader.load_lexer({})
+                )
+            ),
+            (
+                r'''
+                    a -> ((b) (c));
+                ''',
+                parser.Parser(
+                    'a',
+                    {
+                        'a': parser.And([parser.Ref('b'), parser.Ref('c')]),
+                    },
+                    loader.load_lexer({})
+                )
+            ),
+            (
+                r'''
+                    a -> ((b) | (c));
+                ''',
+                parser.Parser(
+                    'a',
+                    {
+                        'a': parser.Or([parser.Ref('b'), parser.Ref('c')]),
+                    },
+                    loader.load_lexer({})
+                )
+            ),
+            (
+                r'''
+                    a -> b*;
+                ''',
+                parser.Parser(
+                    'a',
+                    {
+                        'a': parser.ZeroOrMore(parser.Ref('b')),
+                    },
+                    loader.load_lexer({})
+                )
+            ),
+            (
+                r'''
+                    a -> b+;
+                ''',
+                parser.Parser(
+                    'a',
+                    {
+                        'a': parser.OneOrMore(parser.Ref('b')),
+                    },
+                    loader.load_lexer({})
+                )
+            ),
+            (
+                r'''
+                    a -> b?;
+                ''',
+                parser.Parser(
+                    'a',
+                    {
+                        'a': parser.ZeroOrOne(parser.Ref('b')),
+                    },
+                    loader.load_lexer({})
+                )
+            ),
+            (
+                r'''
+                    a -> b!;
+                ''',
+                parser.Parser(
+                    'a',
+                    {
+                        'a': parser.UntilEmpty(parser.Ref('b')),
+                    },
+                    loader.load_lexer({})
+                )
+            ),
         ]:
             with self.subTest((input, parser_)):
                 self.assertEqual(parser_, loader.load_parser(input))
