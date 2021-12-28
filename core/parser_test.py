@@ -1,37 +1,79 @@
-from dataclasses import dataclass
-from unittest import TestCase
-
-from core import lexer, parser, processor
+from core import lexer, parser, processor_test
 
 if 'unittest.util' in __import__('sys').modules:
     # Show full diff in self.assertEqual.
     __import__('sys').modules['unittest.util']._MAX_LENGTH = 999999999
 
 
-@dataclass(frozen=True)
-class RuleWithName(parser.Rule):
-    name: str
-
-    def __eq__(self, rhs: object) -> bool:
-        return isinstance(rhs, processor.Rule) and rhs.name == self.name
-
-    def apply(self, state: parser.State) -> parser.ResultAndState:
-        raise NotImplemented()
+ApplyEqualsCase = processor_test.ApplyEqualsCase[parser.ResultValue,
+                                                 parser.StateValue]
+ApplyRaisesCase = processor_test.ApplyRaisesCase[parser.StateValue]
+ResultAndStateMatcher = processor_test.ResultAndStateMatcher[parser.ResultValue,
+                                                             parser.StateValue]
+ResultMatcher = processor_test.ResultMatcher[parser.ResultValue]
 
 
-class LiteralTest(TestCase):
-    def test_match(self):
-        self.assertEqual(
-            parser.Literal('a', 'a').apply(
-                parser.State(
-                    [lexer.Token('a', 'b')]
-                )
+class ParserTest(processor_test.ProcessorTest[parser.ResultValue, parser.StateValue]):
+    def test_literal_match(self):
+        self.assertApplyEqualsCases(
+            parser.Parser(
+                'a',
+                {
+                    'a': parser.Literal('int'),
+                },
+                lexer.Lexer({})
             ),
-            parser.ResultAndState(
-                parser.Result(
-                    RuleWithName('a'),
-                    lexer.Token('a', 'b'),
-                    []
+            [
+                ApplyEqualsCase(
+                    parser.StateValue([lexer.Token('int', '1')]),
+                    ResultAndStateMatcher(
+                        ResultMatcher(
+                            rule_name='a',
+                            value=parser.ResultValue('int', '1'),
+                        )
+                    )
                 ),
-                parser.State([]))
+                ApplyEqualsCase(
+                    parser.StateValue(
+                        [
+                            lexer.Token('int', '1'),
+                            lexer.Token('int', '2'),
+                        ]
+                    ),
+                    ResultAndStateMatcher(
+                        ResultMatcher(
+                            rule_name='a',
+                            value=parser.ResultValue('int', '1'),
+                        ),
+                        parser.StateValue([lexer.Token('int', '2')])
+                    )
+                ),
+            ]
+        )
+
+    def test_literal_mismatch(self):
+        self.assertApplyRaisesCases(
+            parser.Parser(
+                'a',
+                {
+                    'a': parser.Literal('int'),
+                },
+                lexer.Lexer({})
+            ),
+            [
+                ApplyRaisesCase(
+                    parser.StateValue([]),
+                    parser.Error(
+                        msg='state empty',
+                        rule_name='a',
+                    )
+                ),
+                ApplyRaisesCase(
+                    parser.StateValue([lexer.Token('str', 'abc')]),
+                    parser.Error(
+                        msg='literal mismatch expected int got str',
+                        rule_name='a',
+                    )
+                ),
+            ]
         )
