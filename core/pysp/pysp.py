@@ -148,8 +148,11 @@ def load(input: str) -> Sequence[Expr]:
             return expr_loaders[expr_result.rule_name](expr_result)
         return closure
 
+    def load_exprs(result: parser.Result) -> Sequence[Expr]:
+        return [load_expr(expr) for expr in result.where(parser.Result.rule_name_is('expr'))]
+
     def load_compound_expr(result: parser.Result) -> Expr:
-        return CompoundExpr([load_expr(expr) for expr in result.where(parser.Result.rule_name_is('expr'))])
+        return CompoundExpr(load_exprs(result))
 
     def load_ref(result: parser.Result) -> Expr:
         return Ref(result.where_one(parser.Result.rule_name_is('id')).get_value().value)
@@ -160,13 +163,10 @@ def load(input: str) -> Sequence[Expr]:
     def load_params(result: parser.Result) -> Sequence[str]:
         return [id.get_value().value for id in result.where(parser.Result.rule_name_is('id'))]
 
-    def load_func_body(result: parser.Result) -> Sequence[Expr]:
-        return [load_expr(expr) for expr in result.where(parser.Result.rule_name_is('expr'))]
-
     def load_lambda(result: parser.Result) -> Expr:
         params = load_params(result.where_one(
             parser.Result.rule_name_is('params')))
-        func_body = load_func_body(result.where_one(
+        func_body = load_exprs(result.where_one(
             parser.Result.rule_name_is('func_body')))
         return FuncDef(params, func_body)
 
@@ -178,4 +178,4 @@ def load(input: str) -> Sequence[Expr]:
         'lambda': load_lambda,
     })
 
-    return [load_expr(expr) for expr in result.where(parser.Result.rule_name_is('expr'))]
+    return load_exprs(result)
