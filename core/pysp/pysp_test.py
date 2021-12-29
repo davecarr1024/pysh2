@@ -2,6 +2,10 @@ from typing import Sequence
 from . import pysp
 import unittest
 
+if 'unittest.util' in __import__('sys').modules:
+    # Show full diff in self.assertEqual.
+    __import__('sys').modules['unittest.util']._MAX_LENGTH = 999999999
+
 
 class PyspTest(unittest.TestCase):
     def test_builtin_func(self):
@@ -33,6 +37,13 @@ class PyspTest(unittest.TestCase):
             ('1', [pysp.Literal(pysp.Int(1))]),
             ('a', [pysp.Ref('a')]),
             ('(a b)', [pysp.CompoundExpr([pysp.Ref('a'), pysp.Ref('b')])]),
+            (
+                '(lambda (a) a)',
+                [pysp.FuncDef(
+                    ['a'],
+                    [pysp.Ref('a')],
+                )]
+            ),
         ]:
             with self.subTest(input=input, exprs=exprs):
                 self.assertEqual(exprs, pysp.load(input))

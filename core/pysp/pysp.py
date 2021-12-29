@@ -23,8 +23,8 @@ class CompoundExpr(Expr):
 
 @dataclass(frozen=True)
 class FuncDef(Expr):
-    body: Sequence[Expr]
     params: Sequence[str]
+    body: Sequence[Expr]
 
     def eval(self, scope: 'Scope') -> 'Val':
         return Func(self, scope)
@@ -130,10 +130,13 @@ def load(input: str) -> Sequence[Expr]:
         id = "(_|[a-z]|[A-Z])(_|\-|[a-z]|[A-Z]|[0-9])*";
 
         exprs -> expr!;
-        expr -> compound_expr | literal | ref;
+        expr -> lambda | compound_expr | literal | ref;
         literal -> int;
         ref -> id;
         compound_expr -> "\(" expr+ "\)";
+        lambda -> "\(" "lambda" params func_body "\)";
+        params -> "\(" id* "\)";
+        func_body -> expr+;
     ''')
     result = parser_.apply(input)
 
@@ -154,11 +157,25 @@ def load(input: str) -> Sequence[Expr]:
     def load_int(result: parser.Result) -> Expr:
         return Literal(Int(int(result.get_value().value)))
 
+    def load_params(result: parser.Result) -> Sequence[str]:
+        return [id.get_value().value for id in result.where(parser.Result.rule_name_is('id'))]
+
+    def load_func_body(result: parser.Result) -> Sequence[Expr]:
+        return [load_expr(expr) for expr in result.where(parser.Result.rule_name_is('expr'))]
+
+    def load_lambda(result: parser.Result) -> Expr:
+        params = load_params(result.where_one(
+            parser.Result.rule_name_is('params')))
+        func_body = load_func_body(result.where_one(
+            parser.Result.rule_name_is('func_body')))
+        return FuncDef(params, func_body)
+
     load_literal = dict_loader({'int': load_int})
     load_expr = dict_loader({
         'literal': load_literal,
         'ref': load_ref,
         'compound_expr': load_compound_expr,
+        'lambda': load_lambda,
     })
 
     return [load_expr(expr) for expr in result.where(parser.Result.rule_name_is('expr'))]

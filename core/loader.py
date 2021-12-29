@@ -1,5 +1,5 @@
 from core import lexer, parser, processor
-from typing import Callable, Mapping, MutableMapping, MutableSequence, Optional, Sequence
+from typing import Callable, Mapping, MutableMapping, MutableSequence, Optional, OrderedDict, Sequence
 
 
 def load_lexer_rule(input: str) -> lexer.Rule:
@@ -252,7 +252,7 @@ def load_parser(input: str) -> parser.Parser:
     except processor.Error as error:
         raise processor.Error(msg='failed to load parser', children=[error])
 
-    lexer_rules: MutableMapping[str, lexer.Rule] = {}
+    lexer_rules: OrderedDict[str, lexer.Rule] = OrderedDict()
     parser_rules: MutableMapping[str, parser.Rule] = {}
     root_rule_name: Optional[str] = None
 
@@ -264,6 +264,7 @@ def load_parser(input: str) -> parser.Parser:
                 value), (value, lexer_rules[value])
         else:
             lexer_rules[value] = load_lexer_rule(value)
+            lexer_rules.move_to_end(value, False)
         return parser.Literal(value)
 
     def load_unary_operation(factory: Callable[[parser.Rule], parser.Rule]) -> Callable[[parser.Result], parser.Rule]:
@@ -327,6 +328,7 @@ def load_parser(input: str) -> parser.Parser:
         rule_def: str = result.where_one(
             parser.Result.rule_name_is('str')).get_value().value.strip('"')
         lexer_rules[rule_name] = load_lexer_rule(rule_def)
+        lexer_rules.move_to_end(rule_name)
 
     def load_rule_decl(result: parser.Result) -> None:
         rule_loaders: Mapping[str, Callable[[parser.Result], None]] = {
