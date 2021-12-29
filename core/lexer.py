@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Mapping, MutableMapping, Sequence
+from typing import Mapping, MutableMapping, MutableSequence, Sequence
 
 from core import processor, stream_processor
 
@@ -13,23 +13,48 @@ class _ResultValue(processor.ResultValue):
 
 
 @dataclass(frozen=True)
+class Position:
+    line: int
+    column: int
+
+    def after(self, value: str) -> 'Position':
+        line: int = self.line
+        column: int = self.column
+        for c in value:
+            if c == '\n':
+                line += 1
+                column = 0
+            else:
+                column += 1
+        return Position(line, column)
+
+
+@dataclass(frozen=True)
 class _Item:
     value: str
-
-    def __repr__(self) -> str:
-        return repr(self.value)
+    position: Position
 
     def __post_init__(self):
         if len(self.value) != 1:
             raise Error(msg=f'invalid lexer item {self.value}')
 
 
+class StateValue(stream_processor.Stream[_Item]):
+    def __repr__(self) -> str:
+        if self.empty:
+            return '[]'
+        else:
+            return (''.join([item.value for item in self._values[:10]])+f'@{self._values[0].position}')
+
+    @property
+    def tail(self) -> stream_processor.Stream[_Item]:
+        return StateValue(super().tail._values)
+
+
 Result = stream_processor.Result[_ResultValue]
-StateValue = stream_processor.Stream[_Item]
 State = stream_processor.State[_ResultValue, _Item]
 ResultAndState = stream_processor.ResultAndState[_ResultValue, _Item]
 Rule = stream_processor.Rule[_ResultValue, _Item]
-HeadRule = stream_processor.HeadRule[_ResultValue, _Item]
 Ref = stream_processor.Ref[_ResultValue, _Item]
 And = stream_processor.And[_ResultValue, _Item]
 Or = stream_processor.Or[_ResultValue, _Item]
@@ -52,7 +77,12 @@ _RULES_RULE_NAME = '_rules'
 
 
 def load_state_value(s: str) -> StateValue:
-    return StateValue([_Item(c) for c in s])
+    items: MutableSequence[_Item] = []
+    position: Position = Position(0, 0)
+    for c in s:
+        items.append(_Item(c, position))
+        position = position.after(c)
+    return StateValue(items)
 
 
 @dataclass(frozen=True, init=False)
@@ -106,6 +136,12 @@ class Lexer(stream_processor.Processor[_ResultValue, _Item]):
 
 
 @dataclass(frozen=True)
+class HeadRule(stream_processor.HeadRule[_ResultValue, _Item]):
+    def result(self, head: _Item) -> Result:
+        return Result(value=_ResultValue(head.value))
+
+
+@dataclass(frozen=True)
 class Class(HeadRule):
     min: str
     max: str
@@ -116,16 +152,19 @@ class Class(HeadRule):
     def pred(self, head: _Item) -> bool:
         return self.min <= head.value <= self.max
 
-    def result(self, head: _Item) -> Result:
-        return Result(value=_ResultValue(head.value))
 
+@dataclass(frozen=True)
+class Literal(HeadRule):
+    value: str
 
-class Literal(stream_processor.Literal[_ResultValue, _Item]):
-    def __init__(self, value: str):
-        super().__init__(_Item(value))
+    def __post_init__(self):
+        assert len(self.value) == 1
 
-    def result(self, head: _Item) -> Result:
-        return Result(value=_ResultValue(head.value))
+    def __repr__(self):
+        return self.value
+
+    def pred(self, head: _Item) -> bool:
+        return self.value == head.value
 
 
 @dataclass(frozen=True)

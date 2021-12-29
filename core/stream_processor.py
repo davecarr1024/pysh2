@@ -12,25 +12,25 @@ Error = processor.Error
 
 @dataclass(frozen=True)
 class Stream(processor.StateValue, Generic[_ItemType]):
-    values: Sequence[_ItemType]
+    _values: Sequence[_ItemType]
 
     @property
     def empty(self) -> bool:
-        return len(self.values) == 0
+        return len(self._values) == 0
 
     @property
     def head(self) -> _ItemType:
         if self.empty:
             raise Error(msg='stream empty')
         else:
-            return self.values[0]
+            return self._values[0]
 
     @property
     def tail(self) -> 'Stream[_ItemType]':
         if self.empty:
             raise Error(msg='stream empty')
         else:
-            return self.__class__(self.values[1:])
+            return self.__class__(self._values[1:])
 
 
 @dataclass(frozen=True)

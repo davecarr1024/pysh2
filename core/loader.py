@@ -110,10 +110,8 @@ def load_lexer_rule(input: str) -> lexer.Rule:
         return lexer.Class(min.value.value, max.value.value)
 
     def load_special(result: parser.Result) -> lexer.Rule:
-        value_result = result.where_one(
-            parser.Result.rule_name_is('special_value'))
-        assert value_result.value is not None
-        value = value_result.value.value
+        value = result.where_one(
+            parser.Result.rule_name_is('special_value')).get_value().value
         values: Mapping[str, lexer.Rule] = {
             'n': lexer.Literal('\n'),
             'w': lexer.Or([lexer.Literal(c) for c in ' \n\t']),

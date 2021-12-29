@@ -1,3 +1,4 @@
+from typing import Mapping
 import unittest
 
 from core import lexer, loader, parser
@@ -58,6 +59,21 @@ class LoaderTest(unittest.TestCase):
         ]:
             with self.subTest((input, rule)):
                 self.assertEqual(rule, loader.load_lexer_rule(input))
+
+    def test_load_lexer(self):
+        rule_strs: Mapping[str, str]
+        lexer_: lexer.Lexer
+        for rule_strs, lexer_ in [
+            (
+                {'(': r'\('},
+                lexer.Lexer({'(': lexer.And([lexer.Literal('(')])})
+            ),
+        ]:
+            with self.subTest(rule_strs=rule_strs, lexer=lexer_):
+                self.assertEqual(
+                    lexer_,
+                    loader.load_lexer(rule_strs)
+                )
 
     def test_load_parser(self):
         input: str

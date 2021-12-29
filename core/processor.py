@@ -3,6 +3,25 @@ from dataclasses import dataclass, field
 from typing import Callable, Generic, Iterator, Mapping, MutableSequence, Optional, Sequence, TypeVar
 
 
+@dataclass(frozen=True)
+class Error(Exception):
+    rule_name: Optional[str] = field(default=None, kw_only=True)
+    msg: Optional[str] = field(default=None, kw_only=True)
+    children: Sequence['Error'] = field(default_factory=list, kw_only=True)
+
+    def __str__(self) -> str:
+        return '\n' + self._str(0)
+
+    def _str(self, indent: int) -> str:
+        if not self.rule_name and not self.msg and len(self.children) == 1:
+            return self.children[0]._str(indent)
+        return (f'{"  "*indent}{self.rule_name if self.rule_name else ""} {self.msg if self.msg else ""}'
+                + '\n' + ''.join([child._str(indent+1) for child in self.children]))
+
+    def with_rule_name(self, rule_name: str) -> 'Error':
+        return Error(msg=self.msg, rule_name=rule_name, children=self.children)
+
+
 class ResultValue:
     ...
 
@@ -137,25 +156,6 @@ class Processor(Generic[_ResultValueType, _StateValueType]):
 
 
 @dataclass(frozen=True)
-class Error(Exception):
-    rule_name: Optional[str] = field(default=None, kw_only=True)
-    msg: Optional[str] = field(default=None, kw_only=True)
-    children: Sequence['Error'] = field(default_factory=list, kw_only=True)
-
-    def __str__(self) -> str:
-        return '\n' + self._str(0)
-
-    def _str(self, indent: int) -> str:
-        if not self.rule_name and not self.msg and len(self.children) == 1:
-            return self.children[0]._str(indent)
-        return (f'{"  "*indent}{self.rule_name if self.rule_name else ""} {self.msg if self.msg else ""}'
-                + '\n' + ''.join([child._str(indent+1) for child in self.children]))
-
-    def with_rule_name(self, rule_name: str) -> 'Error':
-        return Error(msg=self.msg, rule_name=rule_name, children=self.children)
-
-
-@dataclass(frozen=True)
 class Ref(Rule[_ResultValueType, _StateValueType]):
     rule_name: str
 
@@ -281,6 +281,9 @@ class UntilEmpty(Rule[_ResultValueType, _StateValueType]):
         while not child_state.value.empty:
             child_result: ResultAndState[_ResultValueType, _StateValueType] = self.child.apply(
                 child_state)
+            if child_state == child_result.state:
+                raise Error(
+                    msg=f'{self} not advancing from {child_state} with result {child_result.result}')
             child_state = child_result.state
             child_results.append(child_result.result)
         return ResultAndState[_ResultValueType, _StateValueType](Result[_ResultValueType](children=child_results), child_state)

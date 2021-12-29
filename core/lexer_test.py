@@ -27,3 +27,9 @@ class LexerTest(TestCase):
                     }).apply(input),
                     lexer.TokenStream(output)
                 )
+
+    def test_paren_literal(self):
+        self.assertEqual(
+            lexer.Lexer({'(': lexer.Literal('(')}).apply('('),
+            lexer.TokenStream([lexer.Token('(', '(')])
+        )

@@ -43,7 +43,7 @@ class Literal(HeadRule):
     token_type: str
 
     def __repr__(self) -> str:
-        return self.token_type
+        return f'"{self.token_type}"'
 
     def apply(self, state: State) -> ResultAndState:
         return ResultAndState.for_child(super().apply(state).with_rule_name(self.token_type))
