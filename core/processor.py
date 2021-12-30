@@ -207,7 +207,7 @@ class Or(Rule[_ResultValueType, _StateValueType]):
         raise Error(children=child_errors)
 
 
-@ dataclass(frozen=True)
+@dataclass(frozen=True)
 class ZeroOrMore(Rule[_ResultValueType, _StateValueType]):
     child: Rule[_ResultValueType, _StateValueType]
 
@@ -229,7 +229,7 @@ class ZeroOrMore(Rule[_ResultValueType, _StateValueType]):
         return ResultAndState[_ResultValueType, _StateValueType](Result[_ResultValueType](children=child_results), child_state)
 
 
-@ dataclass(frozen=True)
+@dataclass(frozen=True)
 class OneOrMore(Rule[_ResultValueType, _StateValueType]):
     child: Rule[_ResultValueType, _StateValueType]
 
@@ -253,7 +253,7 @@ class OneOrMore(Rule[_ResultValueType, _StateValueType]):
         return ResultAndState[_ResultValueType, _StateValueType](Result[_ResultValueType](children=child_results), child_state)
 
 
-@ dataclass(frozen=True)
+@dataclass(frozen=True)
 class ZeroOrOne(Rule[_ResultValueType, _StateValueType]):
     child: Rule[_ResultValueType, _StateValueType]
 
@@ -267,7 +267,7 @@ class ZeroOrOne(Rule[_ResultValueType, _StateValueType]):
             return ResultAndState[_ResultValueType, _StateValueType](Result[_ResultValueType](), state)
 
 
-@ dataclass(frozen=True)
+@dataclass(frozen=True)
 class UntilEmpty(Rule[_ResultValueType, _StateValueType]):
     child: Rule[_ResultValueType, _StateValueType]
 
