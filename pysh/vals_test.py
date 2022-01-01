@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from pysh import errors, types_, vals
+from pysh import types_, vals
 
 from unittest import TestCase
 
@@ -36,7 +36,7 @@ class Str(vals.Val):
 class VarTest(TestCase):
     def test_ctor(self):
         vals.Var(int_type, Int(1))
-        with self.assertRaises(errors.Error):
+        with self.assertRaises(vals.Error):
             vals.Var(str_type, Int(1))
 
     def test_type(self):
@@ -47,7 +47,7 @@ class VarTest(TestCase):
 
     def test_check_assignable(self):
         vals.Var(int_type, Int(1)).check_assignable(Int(2))
-        with self.assertRaises(errors.Error):
+        with self.assertRaises(vals.Error):
             vals.Var(int_type, Int(1)).check_assignable(Str('a'))
 
     def test_set_val(self):
@@ -55,7 +55,7 @@ class VarTest(TestCase):
         self.assertEqual(var.val, Int(1))
         var.set_val(Int(2))
         self.assertEqual(var.val, Int(2))
-        with self.assertRaises(errors.Error):
+        with self.assertRaises(vals.Error):
             var.set_val(Str('a'))
 
     def test_for_val(self):
@@ -65,3 +65,82 @@ class VarTest(TestCase):
         )
 
 
+class ScopeTest(TestCase):
+    def test_contains(self):
+        scope = vals.Scope({'a': vals.Var.for_val(Int(1))})
+        self.assertTrue('a' in scope)
+        self.assertFalse('b' in scope)
+        scope = vals.Scope({}, scope)
+        self.assertTrue('a' in scope)
+        self.assertFalse('b' in scope)
+
+    def test_getitem(self):
+        scope = vals.Scope({'a': vals.Var.for_val(Int(1))})
+        self.assertEqual(scope['a'], Int(1))
+        with self.assertRaises(vals.Error):
+            scope['b']
+        scope = vals.Scope({}, scope)
+        self.assertEqual(scope['a'], Int(1))
+        with self.assertRaises(vals.Error):
+            scope['b']
+
+    def test_setitem(self):
+        scope = vals.Scope({'a': vals.Var.for_val(Int(1))})
+        self.assertEqual(scope['a'], Int(1))
+        scope['a'] = Int(2)
+        self.assertEqual(scope['a'], Int(2))
+        with self.assertRaises(vals.Error):
+            scope['a'] = Str('a')
+        with self.assertRaises(vals.Error):
+            scope['b'] = Int(3)
+        scope = vals.Scope({}, scope)
+        self.assertEqual(scope['a'], Int(2))
+        scope['a'] = Int(3)
+        self.assertEqual(scope['a'], Int(3))
+        with self.assertRaises(vals.Error):
+            scope['a'] = Str('a')
+        with self.assertRaises(vals.Error):
+            scope['b'] = Int(4)
+
+    def test_vals(self):
+        self.assertDictEqual(
+            vals.Scope({'a': vals.Var.for_val(Int(1))}).vals,
+            {'a': Int(1)}
+        )
+
+    def test_all_vals(self):
+        self.assertDictEqual(
+            vals.Scope(
+                {'a': vals.Var.for_val(Int(1))},
+                vals.Scope(
+                    {
+                        'a': vals.Var.for_val(Int(2)),
+                        'b': vals.Var.for_val(Int(3)),
+                    }
+                )
+            ).all_vals(),
+            {
+                'a': Int(1),
+                'b': Int(3),
+            }
+        )
+
+    def test_all_types(self):
+        self.assertDictEqual(
+            vals.Scope(
+                {'a': vals.Var.for_val(Int(1))},
+                vals.Scope(
+                    {
+                        'a': vals.Var.for_val(Str('s')),
+                        'b': vals.Var.for_val(Int(3)),
+                    }
+                )
+            ).all_types(),
+            {'a': int_type, 'b': int_type})
+
+    def test_decl(self):
+        scope = vals.Scope({})
+        scope.decl('a', vals.Var.for_val(Int(1)))
+        self.assertEqual(scope['a'], Int(1))
+        with self.assertRaises(vals.Error):
+            scope.decl('a', vals.Var.for_val(Int(2)))

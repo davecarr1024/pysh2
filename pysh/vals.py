@@ -24,7 +24,11 @@ class Var:
     _val: Val
 
     def __post_init__(self):
-        self._type.check_assignable(self._val.type)
+        try:
+            self._type.check_assignable(self._val.type)
+        except errors.Error as error:
+            raise Error(
+                f'unable to set var with type {self._type} val {self._val}: {error}')
 
     @property
     def type(self) -> types_.Type:
@@ -41,7 +45,11 @@ class Var:
             raise Error(f'{self} cannot assign val {val}: {error}')
 
     def set_val(self, val: Val) -> None:
-        self.check_assignable(val)
+        try:
+            self.check_assignable(val)
+        except errors.Error as error:
+            raise Error(
+                f'unable to set var with type {self._type} val {val}: {error}')
         self._val = val
 
     @staticmethod
@@ -78,18 +86,18 @@ class Scope:
             raise Error(f'unknown var {name}')
 
     @property
-    def vars(self) -> Mapping[str, Var]:
-        return self._vars
+    def vals(self) -> Mapping[str, Val]:
+        return {name: var.val for name, var in self._vars.items()}
 
-    def all_vars(self) -> Mapping[str, Var]:
-        vars = MutableMapping[str, Var]()
+    def all_vals(self) -> Mapping[str, Val]:
+        vals = dict[str, Val]()
         if self.parent is not None:
-            vars.update(self.parent.all_vars())
-        vars.update(self._vars)
-        return vars
+            vals.update(self.parent.all_vals())
+        vals.update(self.vals)
+        return vals
 
     def all_types(self) -> Mapping[str, types_.Type]:
-        return {name: var.type for name, var in self.all_vars().items()}
+        return {name: val.type for name, val in self.all_vals().items()}
 
     def decl(self, name: str, var: Var) -> None:
         if name in self._vars:
@@ -192,9 +200,9 @@ class Class(Callable, types_.Type):
     def _call(self, scope: Scope, args: Args) -> Val:
         object = Object(self, Scope(
             {'__type__': Var.for_val(self)}, self._scope))
-        for name, var in self._scope.vars.items():
-            if isinstance(var, BindableCallable):
-                val = var.bind(object)
+        for name, val in self._scope.vals.items():
+            if isinstance(val, BindableCallable):
+                val = val.bind(object)
                 object.members.decl(name, Var.for_val(val))
         if '__init__' in object.members:
             init = object.members['__init__']
