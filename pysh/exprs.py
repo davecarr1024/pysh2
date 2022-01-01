@@ -1,6 +1,6 @@
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Mapping, MutableMapping, Optional, Sequence
+from typing import Iterable
 
 from pysh import errors, types_, vals
 
@@ -9,64 +9,20 @@ class Error(errors.Error):
     ...
 
 
-class Expr(ABC):
-    @abstractmethod
-    def type(self, scope: 'Scope') -> types_.Type: ...
+@dataclass(frozen=True)
+class Expr(types_.Val, ABC):
+    scope: 'Scope'
 
     @abstractmethod
     def eval(self, scope: vals.Scope) -> vals.Val: ...
 
-
-@dataclass
-class Var:
-    _type: types_.Type
-    _expr: Expr
-
-    @property
-    def type(self) -> types_.Type:
-        return self._type
-
-    @property
-    def expr(self) -> Expr:
-        return self._expr
-
-    def set_expr(self, scope: 'Scope', expr: Expr) -> None:
-        self._type.check_assignable(expr.type(scope))
-        self._expr = expr
+    def apply(self, scope: 'MutableScope') -> None: ...
 
 
-@dataclass(frozen=True)
-class Scope:
-    _vars: MutableMapping[str, Var]
-    parent: Optional['Scope'] = None
-
-    def __contains__(self, name: str) -> bool:
-        return name in self._vars or (self.parent is not None and name in self.parent)
-
-    def __getitem__(self, name: str) -> Expr:
-        if name in self._vars:
-            return self._vars[name].expr
-        elif self.parent is not None:
-            return self.parent[name]
-        else:
-            raise Error(f'unknown expr {name}')
-
-    def __setitem__(self, name: str, expr: Expr) -> None:
-        if name in self._vars:
-            self._vars[name].set_expr(self, expr)
-        elif self.parent is not None:
-            self.parent[name] = expr
-        else:
-            raise Error(f'unknown expr {name}')
-
-    @property
-    def vars(self) -> Mapping[str, Var]:
-        return self._vars
-
-    def decl(self, name: str, var: Var) -> None:
-        if name in self._vars:
-            raise Error(f'duplicate expr {name}')
-        self._vars[name] = var
+Scope = types_.Scope[Expr]
+MutableScope = types_.MutableScope[Expr]
+Var = types_.Var[Expr]
+MutableVar = types_.MutableVar[Expr]
 
 
 @dataclass(frozen=True)
@@ -75,11 +31,16 @@ class Decl(Expr):
     name: str
     expr: Expr
 
-    def type(self, scope: Scope) -> types_.Type:
-        scope.decl(self.name, Var(self._type, self.expr))
+    @property
+    def type(self) -> types_.Type:
         return self._type
 
+    def apply(self, scope: 'MutableScope') -> None:
+        scope.decl(self.name, Var(self._type, self.expr))
+
     def eval(self, scope: vals.Scope) -> vals.Val:
+        if not isinstance(scope, vals.MutableScope):
+            raise Error(f'applying decl {self} to immutable scope')
         val = self.expr.eval(scope)
         scope.decl(self.name, vals.Var(self._type, val))
         return val
@@ -89,7 +50,8 @@ class Decl(Expr):
 class Literal(Expr):
     val: vals.Val
 
-    def type(self, scope: Scope) -> types_.Type:
+    @property
+    def type(self) -> types_.Type:
         return self.val.type
 
     def eval(self, scope: vals.Scope) -> vals.Val:
@@ -100,56 +62,52 @@ class Literal(Expr):
 class Ref(Expr):
     name: str
 
-    def type(self, scope: Scope) -> types_.Type:
-        return scope[self.name].type(scope)
+    @property
+    def type(self) -> types_.Type:
+        return self.scope[self.name].type
 
     def eval(self, scope: vals.Scope) -> vals.Val:
-        return scope[self.name]
+        return self.scope[self.name].eval(scope)
 
 
 @dataclass(frozen=True)
 class Member(Expr):
-    parent: Expr
+    object: Expr
     name: str
 
-    def type(self, scope: Scope) -> types_.Type:
-        if self.name not in self.parent.type(scope).member_types:
-            raise Error(f'unknown member {self.name} in {self.parent}')
-        else:
-            return self.parent.type(scope).member_types[self.name]
+    @property
+    def type(self) -> types_.Type:
+        return self.object.type.member_types[self.name]
 
     def eval(self, scope: vals.Scope) -> vals.Val:
-        return self.parent.eval(scope).members[self.name]
+        return self.object.eval(scope).members[self.name]
 
 
 @dataclass(frozen=True)
-class Args:
-    args: Sequence[Expr]
+class Args(list[Expr]):
+    def __init__(self, exprs: Iterable[Expr]):
+        super().__init__(exprs)
 
-    def types(self, scope: Scope) -> Sequence[types_.Type]:
-        return [arg.type(scope) for arg in self.args]
+    @property
+    def types(self) -> types_.Args:
+        return types_.Args([types_.Arg(expr.type) for expr in self])
 
     def eval(self, scope: vals.Scope) -> vals.Args:
-        return vals.Args([arg.eval(scope) for arg in self.args])
-
-
-@dataclass(frozen=True)
-class Callable(Expr):
-    @abstractproperty
-    def signature(self) -> types_.Signature: ...
+        return vals.Args([vals.Arg(expr.eval(scope)) for expr in self])
 
 
 @dataclass(frozen=True)
 class Call(Expr):
-    func: Callable
+    func: Expr
     args: Args
 
-    def type(self, scope: Scope) -> types_.Type:
-        self.func.signature.check_args_assignable(self.args.types(scope))
-        return self.func.signature.return_type
+    @property
+    def signature(self) -> types_.Signature:
+        return self.func.type.signatures.for_args(self.args.types)
+
+    @property
+    def type(self) -> types_.Type:
+        return self.signature.return_type
 
     def eval(self, scope: vals.Scope) -> vals.Val:
-        func = self.func.eval(scope)
-        if not isinstance(func, vals.Callable):
-            raise Error(f'{func} not callable')
-        return func.call(scope, self.args.eval(scope))
+        return self.func.eval(scope).call(scope, self.args.eval(scope))

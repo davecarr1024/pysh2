@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from abc import ABC, abstractmethod, abstractproperty
-from typing import Generic, Iterable, Mapping, MutableMapping, Optional, Sequence, TypeVar
+from typing import Generic, Iterable, Mapping, MutableMapping, Optional, TypeVar
 
 from pysh import errors
 
@@ -94,22 +94,23 @@ class Signatures(list[Signature]):
     def __init__(self, signatures: Iterable[Signature]):
         super().__init__(signatures)
 
-    def get_callable(self, args: Args) -> Sequence[Signature]:
+    def for_args(self, args: Args) -> Signature:
         if len(self) == 0:
             raise Error(f'not callable')
+        errors = list[Error]()
+        signatures = list[Signature]()
+        for signature in self:
+            try:
+                signature.check_args_assignable(args)
+                signatures.append(signature)
+            except Error as error:
+                errors.append(error)
+        if len(signatures) > 1:
+            raise Error(f'ambiguous call: {signatures}')
+        elif len(signatures) == 1:
+            return signatures[0]
         else:
-            errors = list[Error]()
-            signatures = list[Signature]()
-            for signature in self:
-                try:
-                    signature.check_args_assignable(args)
-                    signatures.append(signature)
-                except Error as error:
-                    errors.append(error)
-            if signatures:
-                return signatures
-            else:
-                raise Error(f'failed to find callable signature: {errors}')
+            raise Error(f'no signatures matched: {errors}')
 
     def without_first_param(self) -> 'Signatures':
         return Signatures(signature.without_first_param() for signature in self)

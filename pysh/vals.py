@@ -34,10 +34,7 @@ class Val(types_.Val, ABC):
 
     @final
     def call(self, scope: 'Scope', args: 'Args') -> 'Val':
-        callable_signatures = self.signatures.get_callable(args.types)
-        if len(callable_signatures) > 1:
-            raise Error(f'ambiguous call {self} {args} {callable_signatures}')
-        signature = callable_signatures[0]
+        signature = self.signatures.for_args(args.types)
         val = self._call(scope, args)
         try:
             signature.check_return_assignable(val.type)
@@ -53,7 +50,10 @@ class Val(types_.Val, ABC):
 Var = types_.Var[Val]
 MutableVar = types_.MutableVar[Val]
 Scope = types_.Scope[Val]
-MutableScope = types_.MutableScope[Val]
+
+
+class MutableScope(types_.MutableScope[Val]):
+    ...
 
 
 @dataclass(frozen=True)
