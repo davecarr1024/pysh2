@@ -3,55 +3,43 @@ from pysh import types_, vals
 
 from unittest import TestCase
 
-int_type = types_.BuiltinType('int')
-str_type = types_.BuiltinType('str)')
+if 'unittest.util' in __import__('sys').modules:
+    # Show full diff in self.assertEqual.
+    __import__('sys').modules['unittest.util']._MAX_LENGTH = 999999999
 
 
+@vals.builtin_class
 @dataclass(frozen=True)
-class Int(vals.Val):
+class Int(vals.BuiltinClass):
     value: int
 
-    @property
-    def type(self) -> types_.Type:
-        return int_type
 
-    @property
-    def members(self) -> vals.Scope:
-        return vals.Scope({})
-
-
+@vals.builtin_class
 @dataclass(frozen=True)
-class Str(vals.Val):
+class Str(vals.BuiltinClass):
     value: str
-
-    @property
-    def type(self) -> types_.Type:
-        return str_type
-
-    @property
-    def members(self) -> vals.Scope:
-        return vals.Scope({})
 
 
 class VarTest(TestCase):
     def test_ctor(self):
-        vals.Var(int_type, Int(1))
+        vals.Var(Int.builtin_class(), Int(1))
         with self.assertRaises(vals.Error):
-            vals.Var(str_type, Int(1))
+            vals.Var(Str.builtin_class(), Int(1))
 
     def test_type(self):
-        self.assertEqual(vals.Var(int_type, Int(1)).type, int_type)
+        self.assertEqual(vals.Var(Int.builtin_class(),
+                         Int(1)).type, Int.builtin_class())
 
     def test_val(self):
-        self.assertEqual(vals.Var(int_type, Int(1)).val, Int(1))
+        self.assertEqual(vals.Var(Int.builtin_class(), Int(1)).val, Int(1))
 
     def test_check_assignable(self):
-        vals.Var(int_type, Int(1)).check_assignable(Int(2))
+        vals.Var(Int.builtin_class(), Int(1)).check_assignable(Int(2))
         with self.assertRaises(vals.Error):
-            vals.Var(int_type, Int(1)).check_assignable(Str('a'))
+            vals.Var(Int.builtin_class(), Int(1)).check_assignable(Str('a'))
 
     def test_set_val(self):
-        var = vals.Var(int_type, Int(1))
+        var = vals.Var(Int.builtin_class(), Int(1))
         self.assertEqual(var.val, Int(1))
         var.set_val(Int(2))
         self.assertEqual(var.val, Int(2))
@@ -61,7 +49,7 @@ class VarTest(TestCase):
     def test_for_val(self):
         self.assertEqual(
             vals.Var.for_val(Int(1)),
-            vals.Var(int_type, Int(1))
+            vals.Var(Int.builtin_class(), Int(1))
         )
 
 
@@ -136,7 +124,7 @@ class ScopeTest(TestCase):
                     }
                 )
             ).all_types(),
-            {'a': int_type, 'b': int_type})
+            {'a': Int.builtin_class(), 'b': Int.builtin_class()})
 
     def test_decl(self):
         scope = vals.Scope({})
@@ -144,3 +132,20 @@ class ScopeTest(TestCase):
         self.assertEqual(scope['a'], Int(1))
         with self.assertRaises(vals.Error):
             scope.decl('a', vals.Var.for_val(Int(2)))
+
+
+class BuiltinFuncTest(TestCase):
+    def test_signature(self):
+        def add_ints(a: Int, b: Int) -> Int:
+            return Int(a.value + b.value)
+        func = vals.BuiltinFunc(add_ints)
+        self.assertEqual(
+            func.signature,
+            types_.Signature(
+                types_.Params([
+                    types_.Param('a', Int.builtin_class()),
+                    types_.Param('b', Int.builtin_class()),
+                ]),
+                Int.builtin_class()
+            )
+        )

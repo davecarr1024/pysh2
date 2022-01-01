@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod, abstractproperty
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Mapping, MutableMapping, Optional, Sequence
+import inspect
+from typing import Mapping, MutableMapping, Optional, Sequence, TypeVar
+import typing
 
 from pysh import errors, types_
 
@@ -190,6 +192,19 @@ class Class(Callable, types_.Type):
     def members(self) -> Scope:
         return self._scope
 
+    @property
+    def signature(self) -> types_.Signature:
+        if '__init__' in self._scope:
+            init = self._scope['init']
+            if isinstance(init, BindableCallable):
+                return init.signature.without_first_param()
+            elif isinstance(init, Callable):
+                return init.signature
+            else:
+                raise Error(f'ucallable init {init}')
+        else:
+            return types_.Signature(types_.Params([]), self)
+
     def check_assignable(self, type: types_.Type) -> None:
         if type != self:
             if self.parent is not None:
@@ -224,3 +239,67 @@ class Object(Val):
     @property
     def members(self) -> Scope:
         return self._scope
+
+
+@dataclass(frozen=True)
+class BuiltinFunc(BindableCallable):
+    func: typing.Callable[..., Val]
+
+    @staticmethod
+    def builtin_type() -> types_.BuiltinType:
+        return types_.BuiltinType('builtin_func')
+
+    @property
+    def type(self) -> types_.Type:
+        return self.builtin_type()
+
+    @property
+    def members(self) -> Scope:
+        return Scope({})
+
+    @staticmethod
+    def lookup_type(type: typing.Type[typing.Any]) -> types_.Type:
+        return _builtin_classes[type]
+
+    @property
+    def signature(self) -> types_.Signature:
+        try:
+            func_sig = inspect.signature(self.func)
+            return types_.Signature(
+                types_.Params(
+                    [types_.Param(name, self.lookup_type(param.annotation))
+                     for name, param in func_sig.parameters.items()]
+                ),
+                self.lookup_type(func_sig.return_annotation)
+            )
+        except Error as error:
+            raise Error(f'{self} failed to convert signature: {error}')
+
+    def _call(self, scope: Scope, args: Args) -> Val:
+        raise NotImplementedError()
+
+
+class BuiltinClass(Val):
+    @staticmethod
+    def builtin_class() -> Class:
+        raise NotImplementedError('unregistered builtin class')
+
+    @property
+    def type(self) -> types_.Type:
+        return self.builtin_class()
+
+    @property
+    def members(self) -> Scope:
+        return Scope({})
+
+
+_BuiltinClassType = TypeVar('_BuiltinClassType', bound=type[BuiltinClass])
+
+_builtin_classes: MutableMapping[type, Class] = {}
+
+
+def builtin_class(cls: _BuiltinClassType) -> _BuiltinClassType:
+    class_ = Class(cls.__name__, None, Scope({}))
+    _builtin_classes[cls] = class_
+    cls.builtin_class = staticmethod(lambda: class_)
+    return cls

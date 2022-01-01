@@ -1,11 +1,7 @@
 from dataclasses import dataclass
 from typing import Sequence
 
-from pysh import errors, exprs, types_, vals
-
-
-class Error(errors.Error):
-    ...
+from pysh import exprs, types_, vals
 
 
 @dataclass(frozen=True)

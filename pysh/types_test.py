@@ -37,11 +37,11 @@ class SignatureTest(TestCase):
     def test_check_assignable(self):
         signature = types_.Signature(types_.Params(
             [types_.Param('a', int_), types_.Param('b', int_)]), int_)
-        signature.check_args_assignable([int_, int_])
+        signature.check_args_assignable([int_,int_])
         with self.assertRaises(types_.Error):
             signature.check_args_assignable([])
         with self.assertRaises(types_.Error):
-            signature.check_args_assignable([int_, str_])
+            signature.check_args_assignable([int_,str_])
         signature.check_return_val_assignable(int_)
         with self.assertRaises(types_.Error):
             signature.check_return_val_assignable(str_)
