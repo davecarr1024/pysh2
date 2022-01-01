@@ -23,6 +23,9 @@ class Var:
     _type: types_.Type
     _val: Val
 
+    def __post_init__(self):
+        self._type.check_assignable(self._val.type)
+
     @property
     def type(self) -> types_.Type:
         return self._type
