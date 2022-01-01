@@ -16,9 +16,6 @@ class Val(ABC):
     @abstractproperty
     def type(self) -> types_.Type: ...
 
-    @abstractproperty
-    def members(self) -> 'Scope': ...
-
 
 @dataclass
 class Var:
@@ -120,8 +117,8 @@ class Args:
         return Args([arg] + list(self.args))
 
     @cached_property
-    def types(self) -> Sequence[types_.Type]:
-        return [arg.type for arg in self.args]
+    def types(self) -> types_.Args:
+        return types_.Args([types_.Arg(arg.type) for arg in self.args])
 
 
 @dataclass(frozen=True)
@@ -135,7 +132,7 @@ class Callable(Val, ABC):
     def call(self, scope: Scope, args: Args) -> Val:
         self.signature.check_args_assignable(args.types)
         return_val = self._call(scope, args)
-        self.signature.check_return_val_assignable(return_val.type)
+        self.signature.check_return_assignable(return_val.type)
         return return_val
 
 
@@ -149,8 +146,8 @@ class BoundCallable(Callable):
         return self.func.signature.without_first_param()
 
     @staticmethod
-    def builtin_type() -> types_.BuiltinType:
-        return types_.BuiltinType('bound_callable')
+    def builtin_type() -> types_.Builtin:
+        return types_.Builtin('bound_callable')
 
     @property
     def type(self) -> types_.Type:
@@ -173,8 +170,8 @@ class Class(Callable, types_.Type):
     _scope: Scope
 
     @staticmethod
-    def builtin_type() -> types_.BuiltinType:
-        return types_.BuiltinType('class')
+    def builtin_type() -> types_.Builtin:
+        return types_.Builtin('class')
 
     @property
     def type(self) -> types_.Type:
@@ -186,7 +183,7 @@ class Class(Callable, types_.Type):
 
     @property
     def member_types(self) -> Mapping[str, types_.Type]:
-        return self._scope.all_types()
+        return self.members.all_types()
 
     @property
     def members(self) -> Scope:
@@ -242,12 +239,15 @@ class Object(Val):
 
 
 @dataclass(frozen=True)
-class BuiltinFunc(BindableCallable):
+class BuiltinFunc(Callable):
     func: typing.Callable[..., Val]
 
+    def __post_init__(self):
+        self.check_assignable(self.func)
+
     @staticmethod
-    def builtin_type() -> types_.BuiltinType:
-        return types_.BuiltinType('builtin_func')
+    def builtin_type() -> types_.Builtin:
+        return types_.Builtin('builtin_func')
 
     @property
     def type(self) -> types_.Type:
@@ -258,8 +258,22 @@ class BuiltinFunc(BindableCallable):
         return Scope({})
 
     @staticmethod
-    def lookup_type(type: typing.Type[typing.Any]) -> types_.Type:
-        return _builtin_classes[type]
+    def check_assignable(func: typing.Callable[..., typing.Any]) -> None:
+        func_sig = inspect.signature(func)
+        for param in func_sig.parameters.values():
+            if param.annotation not in _builtin_classes:
+                raise Error(f'{func} has invalid param {param}')
+        if func_sig.return_annotation not in _builtin_classes:
+            raise Error(
+                f'{func} has invalid return type {func_sig.return_annotation}')
+
+    @staticmethod
+    def is_assignable(func: typing.Callable[..., typing.Any]) -> bool:
+        try:
+            BuiltinFunc.check_assignable(func)
+            return True
+        except Error:
+            return False
 
     @property
     def signature(self) -> types_.Signature:
@@ -267,10 +281,10 @@ class BuiltinFunc(BindableCallable):
             func_sig = inspect.signature(self.func)
             return types_.Signature(
                 types_.Params(
-                    [types_.Param(name, self.lookup_type(param.annotation))
+                    [types_.Param(name, builtin_class_for_type(param.annotation))
                      for name, param in func_sig.parameters.items()]
                 ),
-                self.lookup_type(func_sig.return_annotation)
+                builtin_class_for_type(func_sig.return_annotation)
             )
         except Error as error:
             raise Error(f'{self} failed to convert signature: {error}')
@@ -279,27 +293,40 @@ class BuiltinFunc(BindableCallable):
         raise NotImplementedError()
 
 
-class BuiltinClass(Val):
-    @staticmethod
-    def builtin_class() -> Class:
-        raise NotImplementedError('unregistered builtin class')
+@dataclass(frozen=True)
+class BindableBuiltinFunc(BuiltinFunc, BindableCallable):
+    ...
 
-    @property
-    def type(self) -> types_.Type:
-        return self.builtin_class()
-
-    @property
-    def members(self) -> Scope:
-        return Scope({})
-
-
-_BuiltinClassType = TypeVar('_BuiltinClassType', bound=type[BuiltinClass])
 
 _builtin_classes: MutableMapping[type, Class] = {}
 
 
-def builtin_class(cls: _BuiltinClassType) -> _BuiltinClassType:
-    class_ = Class(cls.__name__, None, Scope({}))
-    _builtin_classes[cls] = class_
-    cls.builtin_class = staticmethod(lambda: class_)
+@dataclass(frozen=True)
+class BuiltinClass(Val):
+    @property
+    def type(self) -> types_.Type:
+        try:
+            return builtin_class_for_type(self.__class__)
+        except Error as error:
+            raise Error(
+                f'BuiltinClass {self.__class__} not registered: {error}')
+
+
+_BuiltinClassType = TypeVar('_BuiltinClassType', bound=type[BuiltinClass])
+
+
+def register_builtin_class(cls: _BuiltinClassType) -> _BuiltinClassType:
+    _builtin_classes[cls] = Class(cls.__name__,
+                                  None,
+                                  Scope({}))
     return cls
+
+
+def builtin_class_for_type(type: typing.Type[typing.Any]) -> Class:
+    if type not in _builtin_classes:
+        raise Error(f'{type} is not a builtin class')
+    return _builtin_classes[type]
+
+
+def builtin_classes() -> Mapping[type, Class]:
+    return _builtin_classes

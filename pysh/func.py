@@ -11,7 +11,7 @@ class Func(vals.Callable):
 
     @property
     def type(self) -> types_.Type:
-        return types_.BuiltinType('func')
+        return types_.Builtin('func')
 
     @property
     def members(self) -> vals.Scope:

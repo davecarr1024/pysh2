@@ -8,38 +8,47 @@ if 'unittest.util' in __import__('sys').modules:
     __import__('sys').modules['unittest.util']._MAX_LENGTH = 999999999
 
 
-@vals.builtin_class
 @dataclass(frozen=True)
+@vals.register_builtin_class
 class Int(vals.BuiltinClass):
     value: int
 
+    def __add__(self, rhs: 'Int') -> 'Int':
+        return Int(self.value+rhs.value)
 
-@vals.builtin_class
+
+int_type = vals.builtin_class_for_type(Int)
+
+
+@vals.register_builtin_class
 @dataclass(frozen=True)
 class Str(vals.BuiltinClass):
     value: str
 
 
+str_type = vals.builtin_class_for_type(Str)
+
+
 class VarTest(TestCase):
     def test_ctor(self):
-        vals.Var(Int.builtin_class(), Int(1))
+        vals.Var(int_type, Int(1))
         with self.assertRaises(vals.Error):
-            vals.Var(Str.builtin_class(), Int(1))
+            vals.Var(str_type, Int(1))
 
     def test_type(self):
-        self.assertEqual(vals.Var(Int.builtin_class(),
-                         Int(1)).type, Int.builtin_class())
+        self.assertEqual(vals.Var(int_type,
+                         Int(1)).type, int_type)
 
     def test_val(self):
-        self.assertEqual(vals.Var(Int.builtin_class(), Int(1)).val, Int(1))
+        self.assertEqual(vals.Var(int_type, Int(1)).val, Int(1))
 
     def test_check_assignable(self):
-        vals.Var(Int.builtin_class(), Int(1)).check_assignable(Int(2))
+        vals.Var(int_type, Int(1)).check_assignable(Int(2))
         with self.assertRaises(vals.Error):
-            vals.Var(Int.builtin_class(), Int(1)).check_assignable(Str('a'))
+            vals.Var(int_type, Int(1)).check_assignable(Str('a'))
 
     def test_set_val(self):
-        var = vals.Var(Int.builtin_class(), Int(1))
+        var = vals.Var(int_type, Int(1))
         self.assertEqual(var.val, Int(1))
         var.set_val(Int(2))
         self.assertEqual(var.val, Int(2))
@@ -49,7 +58,7 @@ class VarTest(TestCase):
     def test_for_val(self):
         self.assertEqual(
             vals.Var.for_val(Int(1)),
-            vals.Var(Int.builtin_class(), Int(1))
+            vals.Var(int_type, Int(1))
         )
 
 
@@ -124,7 +133,7 @@ class ScopeTest(TestCase):
                     }
                 )
             ).all_types(),
-            {'a': Int.builtin_class(), 'b': Int.builtin_class()})
+            {'a': int_type, 'b': int_type})
 
     def test_decl(self):
         scope = vals.Scope({})
@@ -143,9 +152,9 @@ class BuiltinFuncTest(TestCase):
             func.signature,
             types_.Signature(
                 types_.Params([
-                    types_.Param('a', Int.builtin_class()),
-                    types_.Param('b', Int.builtin_class()),
+                    types_.Param('a', int_type),
+                    types_.Param('b', int_type),
                 ]),
-                Int.builtin_class()
+                int_type
             )
         )
