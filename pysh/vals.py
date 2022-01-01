@@ -303,13 +303,13 @@ _builtin_classes: MutableMapping[type, Class] = {}
 
 @dataclass(frozen=True)
 class BuiltinClass(Val):
+    @classmethod
+    def builtin_class(cls) -> Class:
+        return builtin_class_for_type(cls)
+
     @property
     def type(self) -> types_.Type:
-        try:
-            return builtin_class_for_type(self.__class__)
-        except Error as error:
-            raise Error(
-                f'BuiltinClass {self.__class__} not registered: {error}')
+        return self.builtin_class()
 
 
 _BuiltinClassType = TypeVar('_BuiltinClassType', bound=type[BuiltinClass])
@@ -330,3 +330,21 @@ def builtin_class_for_type(type: typing.Type[typing.Any]) -> Class:
 
 def builtin_classes() -> Mapping[type, Class]:
     return _builtin_classes
+
+
+@dataclass(frozen=True)
+@register_builtin_class
+class Bool(BuiltinClass):
+    val: bool
+
+
+@dataclass(frozen=True)
+@register_builtin_class
+class Int(BuiltinClass):
+    val: int
+
+
+@dataclass(frozen=True)
+@register_builtin_class
+class Str(BuiltinClass):
+    val: str
