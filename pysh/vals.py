@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod, abstractproperty
 from dataclasses import dataclass
-from functools import cached_property
 import inspect
-from typing import Mapping, MutableMapping, Optional, Sequence, TypeVar
+from typing import Iterable, Mapping, MutableMapping, Optional, TypeVar, final
 import typing
 
 from pysh import errors, types_
@@ -12,138 +11,81 @@ class Error(errors.Error):
     ...
 
 
-class Val(ABC):
-    @abstractproperty
-    def type(self) -> types_.Type: ...
-
-
-@dataclass
-class Var:
-    _type: types_.Type
-    _val: Val
-
+class Val(types_.Val, ABC):
     def __post_init__(self):
+        for name, type in self.member_types.items():
+            if name not in self.members:
+                raise Error(f'type member {name} missing from {self}')
+            try:
+                type.check_assignable(self.members[name].type)
+            except errors.Error as error:
+                raise Error(f'member {name} has invalid type: {error}')
+
+    @property
+    def signatures(self) -> types_.Signatures:
+        return self.type.signatures
+
+    @property
+    def member_types(self) -> Mapping[str, types_.Type]:
+        return self.type.member_types
+
+    @abstractmethod
+    def _call(self, scope: 'Scope', args: 'Args') -> 'Val': ...
+
+    @final
+    def call(self, scope: 'Scope', args: 'Args') -> 'Val':
+        callable_signatures = self.signatures.get_callable(args.types)
+        if len(callable_signatures) > 1:
+            raise Error(f'ambiguous call {self} {args} {callable_signatures}')
+        signature = callable_signatures[0]
+        val = self._call(scope, args)
         try:
-            self._type.check_assignable(self._val.type)
+            signature.check_return_assignable(val.type)
         except errors.Error as error:
             raise Error(
-                f'unable to set var with type {self._type} val {self._val}: {error}')
+                f'{self} {signature} return invalid result {val}: {error}')
+        return val
+
+    @abstractproperty
+    def members(self) -> 'Scope': ...
+
+
+Var = types_.Var[Val]
+MutableVar = types_.MutableVar[Val]
+Scope = types_.Scope[Val]
+MutableScope = types_.MutableScope[Val]
+
+
+@dataclass(frozen=True)
+class Arg:
+    val: Val
 
     @property
     def type(self) -> types_.Type:
-        return self._type
-
-    @property
-    def val(self) -> Val:
-        return self._val
-
-    def check_assignable(self, val: Val) -> None:
-        try:
-            self._type.check_assignable(val.type)
-        except errors.Error as error:
-            raise Error(f'{self} cannot assign val {val}: {error}')
-
-    def set_val(self, val: Val) -> None:
-        try:
-            self.check_assignable(val)
-        except errors.Error as error:
-            raise Error(
-                f'unable to set var with type {self._type} val {val}: {error}')
-        self._val = val
-
-    @staticmethod
-    def for_val(val: Val) -> 'Var':
-        return Var(val.type, val)
+        return self.val.type
 
 
 @dataclass(frozen=True)
-class Scope:
-    _vars: MutableMapping[str, Var]
-    parent: Optional['Scope'] = None
+class Args(list[Arg]):
+    def __init__(self, args: Iterable[Arg]):
+        super().__init__(args)
 
-    def __contains__(self, name: str) -> bool:
-        return name in self._vars or (self.parent is not None and name in self.parent)
-
-    def __getitem__(self, name: str) -> Val:
-        if name in self._vars:
-            return self._vars[name].val
-        elif self.parent is not None:
-            return self.parent[name]
-        else:
-            raise Error(f'unknown var {name}')
-
-    def __setitem__(self, name: str, val: Val) -> None:
-        if name in self._vars:
-            try:
-                self._vars[name].set_val(val)
-            except errors.Error as error:
-                raise Error(
-                    f'unable to set {name} {self._vars[name]} to incompatible val {val}: {error}')
-        elif self.parent is not None:
-            self.parent[name] = val
-        else:
-            raise Error(f'unknown var {name}')
+    def with_first_arg(self, arg: Arg) -> 'Args':
+        return Args([arg] + self)
 
     @property
-    def vals(self) -> Mapping[str, Val]:
-        return {name: var.val for name, var in self._vars.items()}
-
-    def all_vals(self) -> Mapping[str, Val]:
-        vals = dict[str, Val]()
-        if self.parent is not None:
-            vals.update(self.parent.all_vals())
-        vals.update(self.vals)
-        return vals
-
-    def all_types(self) -> Mapping[str, types_.Type]:
-        return {name: val.type for name, val in self.all_vals().items()}
-
-    def decl(self, name: str, var: Var) -> None:
-        if name in self._vars:
-            raise Error(f'duplicate var {name}')
-        self._vars[name] = var
-
-    @staticmethod
-    def default() -> 'Scope':
-        return Scope({
-        }, None)
-
-
-@dataclass(frozen=True)
-class Args:
-    args: Sequence[Val]
-
-    def with_first_arg(self, arg: Val) -> 'Args':
-        return Args([arg] + list(self.args))
-
-    @cached_property
     def types(self) -> types_.Args:
-        return types_.Args([types_.Arg(arg.type) for arg in self.args])
+        return types_.Args([types_.Arg(arg.type) for arg in self])
 
 
 @dataclass(frozen=True)
-class Callable(Val, ABC):
-    @abstractproperty
-    def signature(self) -> types_.Signature: ...
-
-    @abstractmethod
-    def _call(self, scope: Scope, args: Args) -> Val: ...
-
-    def call(self, scope: Scope, args: Args) -> Val:
-        self.signature.check_args_assignable(args.types)
-        return_val = self._call(scope, args)
-        self.signature.check_return_assignable(return_val.type)
-        return return_val
-
-
-@dataclass(frozen=True)
-class BoundCallable(Callable):
+class BoundCallable(Val):
     bound_arg: Val
-    func: Callable
+    func: Val
 
     @property
-    def signature(self) -> types_.Signature:
-        return self.func.signature.without_first_param()
+    def signatures(self) -> types_.Signatures:
+        return self.func.signatures.without_first_param()
 
     @staticmethod
     def builtin_type() -> types_.Builtin:
@@ -154,17 +96,17 @@ class BoundCallable(Callable):
         return self.builtin_type()
 
     def _call(self, scope: Scope, args: Args) -> Val:
-        return self.func.call(scope, args.with_first_arg(self.bound_arg))
+        return self.func.call(scope, args.with_first_arg(Arg(self.bound_arg)))
 
 
 @dataclass(frozen=True)
-class BindableCallable(Callable):
+class BindableCallable(Val):
     def bind(self, arg: Val) -> BoundCallable:
         return BoundCallable(arg, self)
 
 
 @dataclass(frozen=True)
-class Class(Callable, types_.Type):
+class Class(Val, types_.Type):
     _name: str
     parent: Optional['Class']
     _scope: Scope
@@ -190,17 +132,15 @@ class Class(Callable, types_.Type):
         return self._scope
 
     @property
-    def signature(self) -> types_.Signature:
+    def signatures(self) -> types_.Signatures:
         if '__init__' in self._scope:
             init = self._scope['init']
             if isinstance(init, BindableCallable):
-                return init.signature.without_first_param()
-            elif isinstance(init, Callable):
-                return init.signature
+                return init.signatures.without_first_param()
             else:
-                raise Error(f'ucallable init {init}')
+                return init.signatures
         else:
-            return types_.Signature(types_.Params([]), self)
+            return types_.Signatures([types_.Signature(types_.Params([]), self)])
 
     def check_assignable(self, type: types_.Type) -> None:
         if type != self:
@@ -210,36 +150,38 @@ class Class(Callable, types_.Type):
                 raise Error(f'{self} not assignable with type {type}')
 
     def _call(self, scope: Scope, args: Args) -> Val:
-        object = Object(self, Scope(
+        object = Object(self, MutableScope(
             {'__type__': Var.for_val(self)}, self._scope))
         for name, val in self._scope.vals.items():
             if isinstance(val, BindableCallable):
                 val = val.bind(object)
                 object.members.decl(name, Var.for_val(val))
         if '__init__' in object.members:
-            init = object.members['__init__']
-            if not isinstance(init, Callable):
-                raise Error(f'object {object} __init__ {init} not callable')
-            init.call(scope, args)
+            object.members['__init__'].call(scope, args)
         return object
 
 
 @dataclass(frozen=True)
 class Object(Val):
     class_: Class
-    _scope: Scope
+    _scope: MutableScope
 
     @property
     def type(self) -> types_.Type:
         return self.class_
 
     @property
-    def members(self) -> Scope:
+    def members(self) -> MutableScope:
         return self._scope
+
+    def _call(self, scope: Scope, args: Args) -> Val:
+        if '__call__' in self.members:
+            return self.members['__call__'].call(scope, args)
+        raise Error(f'{self} not callable')
 
 
 @dataclass(frozen=True)
-class BuiltinFunc(Callable):
+class BuiltinFunc(Val):
     func: typing.Callable[..., Val]
 
     def __post_init__(self):
@@ -298,53 +240,106 @@ class BindableBuiltinFunc(BuiltinFunc, BindableCallable):
     ...
 
 
-_builtin_classes: MutableMapping[type, Class] = {}
+@dataclass(frozen=True)
+class BuiltinClass(Val, types_.Type):
+    cls: type['BuiltinObject']
+
+    @property
+    def type(self) -> types_.Type:
+        return types_.Builtin('builtin_class')
+
+    @property
+    def name(self) -> str:
+        return self.cls.__name__
+
+    @property
+    def signatures(self) -> types_.Signatures:
+        # TODO check init and conversions
+        return types_.Signatures([])
+
+    @property
+    def members(self) -> Scope:
+        # TODO extract builtinfuncs
+        return Scope({})
+
+    @property
+    def member_types(self) -> Mapping[str, types_.Type]:
+        return self.members.all_types()
+
+    def _call(self, scope: Scope, args: Args) -> Val:
+        # TODO check init and conversions
+        raise Error(f'{self} not callable')
+
+    def check_assignable(self, type: types_.Type) -> None:
+        # TODO check supertypes
+        if self != type:
+            raise Error(f'{self} not assignable with type {type}')
 
 
 @dataclass(frozen=True)
-class BuiltinClass(Val):
+class BuiltinObject(Val):
     @classmethod
-    def builtin_class(cls) -> Class:
-        return builtin_class_for_type(cls)
+    def builtin_class(cls) -> BuiltinClass:
+        return _builtin_classes[cls]
 
     @property
     def type(self) -> types_.Type:
         return self.builtin_class()
 
+    @property
+    def members(self) -> Scope:
+        # TODO bind bindables
+        return Scope({}, self.builtin_class().members)
 
-_BuiltinClassType = TypeVar('_BuiltinClassType', bound=type[BuiltinClass])
+    def _call(self, scope: Scope, args: Args) -> Val:
+        if '__call__' in self.members:
+            return self.members['__call__'].call(scope, args)
+        raise Error(f'{self} not callable')
 
 
-def register_builtin_class(cls: _BuiltinClassType) -> _BuiltinClassType:
-    _builtin_classes[cls] = Class(cls.__name__,
-                                  None,
-                                  Scope({}))
+_builtin_classes: MutableMapping[type, BuiltinClass] = {}
+_builtin_class_types: MutableMapping[BuiltinClass, type] = {}
+
+_BuiltinObjectType = TypeVar('_BuiltinObjectType', bound=type[BuiltinObject])
+
+
+def register_builtin_class(cls: _BuiltinObjectType) -> _BuiltinObjectType:
+    builtin_class = BuiltinClass(cls)
+    _builtin_classes[cls] = builtin_class
+    _builtin_class_types[builtin_class] = cls
     return cls
 
 
-def builtin_class_for_type(type: typing.Type[typing.Any]) -> Class:
+def builtin_class_for_type(type: typing.Type[typing.Any]) -> BuiltinClass:
     if type not in _builtin_classes:
         raise Error(f'{type} is not a builtin class')
     return _builtin_classes[type]
 
 
-def builtin_classes() -> Mapping[type, Class]:
+def builtin_classes() -> Mapping[type, BuiltinClass]:
     return _builtin_classes
 
 
 @dataclass(frozen=True)
 @register_builtin_class
-class Bool(BuiltinClass):
+class Bool(BuiltinObject):
     val: bool
 
 
 @dataclass(frozen=True)
 @register_builtin_class
-class Int(BuiltinClass):
+class Int(BuiltinObject):
     val: int
 
 
 @dataclass(frozen=True)
 @register_builtin_class
-class Str(BuiltinClass):
+class Str(BuiltinObject):
     val: str
+
+
+def default_scope() -> Scope:
+    return Scope({
+        builtin_class.name: Var.for_val(builtin_class)
+        for builtin_class in _builtin_classes.values()
+    })

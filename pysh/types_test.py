@@ -76,30 +76,30 @@ class SignatureTest(TestCase):
 
 
 class SignaturesTest(TestCase):
-    def test_check_assignable(self):
-        signatures = types_.Signatures([
-            types_.Signature(
-                types_.Params([
-                    int_param(),
-                ]),
-                int_type
-            ),
-            types_.Signature(
-                types_.Params([
-                    str_param(),
-                ]),
-                int_type
-            ),
-        ])
-        signatures.check_args_assignable(types_.Args([int_arg]))
-        signatures.check_args_assignable(types_.Args([str_arg]))
-        with self.assertRaises(types_.Error):
-            signatures.check_args_assignable(types_.Args([]))
-        with self.assertRaises(types_.Error):
-            signatures.check_args_assignable(types_.Args([int_arg, str_arg]))
-        signatures.check_return_assignable(int_type)
-        with self.assertRaises(types_.Error):
-            signatures.check_return_assignable(str_type)
+    # def test_check_assignable(self):
+    #     signatures = types_.Signatures([
+    #         types_.Signature(
+    #             types_.Params([
+    #                 int_param(),
+    #             ]),
+    #             int_type
+    #         ),
+    #         types_.Signature(
+    #             types_.Params([
+    #                 str_param(),
+    #             ]),
+    #             int_type
+    #         ),
+    #     ])
+    #     signatures.check_args_assignable(types_.Args([int_arg]))
+    #     signatures.check_args_assignable(types_.Args([str_arg]))
+    #     with self.assertRaises(types_.Error):
+    #         signatures.check_args_assignable(types_.Args([]))
+    #     with self.assertRaises(types_.Error):
+    #         signatures.check_args_assignable(types_.Args([int_arg, str_arg]))
+    #     signatures.check_return_assignable(int_type)
+    #     with self.assertRaises(types_.Error):
+    #         signatures.check_return_assignable(str_type)
 
     def test_without_first_param(self):
         self.assertEqual(types_.Signatures([types_.Signature(types_.Params([int_param()]), int_type)]).without_first_param(),

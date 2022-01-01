@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from abc import ABC, abstractmethod, abstractproperty
-from typing import Generic, Iterable, Mapping, MutableMapping, Optional, TypeVar
+from typing import Generic, Iterable, Mapping, MutableMapping, Optional, Sequence, TypeVar
 
 from pysh import errors
 
@@ -16,13 +16,9 @@ class Type(ABC):
     @abstractmethod
     def check_assignable(self, type: 'Type') -> None: ...
 
-
-class Callable(Type):
     @abstractproperty
     def signatures(self) -> 'Signatures': ...
 
-
-class Compound(Type):
     @abstractproperty
     def member_types(self) -> Mapping[str, 'Type']: ...
 
@@ -98,35 +94,22 @@ class Signatures(list[Signature]):
     def __init__(self, signatures: Iterable[Signature]):
         super().__init__(signatures)
 
-    def check_args_assignable(self, args: Args) -> None:
+    def get_callable(self, args: Args) -> Sequence[Signature]:
         if len(self) == 0:
-            raise Error(f'empty signature set')
-        elif len(self) == 1:
-            self[0].check_args_assignable(args)
+            raise Error(f'not callable')
         else:
             errors = list[Error]()
+            signatures = list[Signature]()
             for signature in self:
                 try:
                     signature.check_args_assignable(args)
-                    return
+                    signatures.append(signature)
                 except Error as error:
                     errors.append(error)
-            raise Error(f'all signatures failed to match args: {errors}')
-
-    def check_return_assignable(self, return_type: Type) -> None:
-        if len(self) == 0:
-            raise Error(f'empty signature set')
-        elif len(self) == 1:
-            self[0].check_return_assignable(return_type)
-        else:
-            errors = list[Error]()
-            for signature in self:
-                try:
-                    signature.check_return_assignable(return_type)
-                    return
-                except Error as error:
-                    errors.append(error)
-            raise Error(f'all signatures failed to match args: {errors}')
+            if signatures:
+                return signatures
+            else:
+                raise Error(f'failed to find callable signature: {errors}')
 
     def without_first_param(self) -> 'Signatures':
         return Signatures(signature.without_first_param() for signature in self)
@@ -205,6 +188,10 @@ class Scope(Generic[_ValType]):
             return self.parent[name]
         else:
             raise Error(f'unknown var {name}')
+
+    @property
+    def vars(self) -> Mapping[str, Var[_ValType]]:
+        return self._vars
 
     @property
     def vals(self) -> Mapping[str, _ValType]:
