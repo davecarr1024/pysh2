@@ -5,8 +5,9 @@ from pysh import exprs, types_, vals
 
 
 @dataclass(frozen=True)
-class Func(vals.Callable):
-    _signature: types_.Signature
+class Func(vals.Val):
+    name: str
+    signature: types_.Signature
     exprs: Sequence[exprs.Expr]
 
     @property
@@ -18,13 +19,13 @@ class Func(vals.Callable):
         return vals.Scope({})
 
     @property
-    def signature(self) -> types_.Signature:
-        return self._signature
+    def signatures(self) -> types_.Signatures:
+        return types_.Signatures([self.signature])
 
     def _call(self, scope: vals.Scope, args: vals.Args) -> vals.Val:
-        self._signature.check_args_assignable(args.types)
+        self.signature.check_args_assignable(args.types)
         func_scope = vals.Scope({
-            param.name: vals.Var(param.type, arg)
-            for param, arg in zip(self._signature.params.params, args.args)
+            param.name: vals.Var(param.type, arg.val)
+            for param, arg in zip(self.signature.params, args)
         }, scope)
         return [expr.eval(func_scope) for expr in self.exprs][-1]
