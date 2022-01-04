@@ -126,12 +126,15 @@ class Scope(types_.Scope[Var]):
         return self.var(name).val()
 
 
-class MutableScope(types_.Scope[MutableVar]):
+class MutableScope(Scope, types_.MutableScope[Var]):
     def set_val(self, name: str, val: Val) -> None:
         if not name in self.vars():
             raise Error(f'setting unknown var {name}')
+        var = self.vars()[name]
+        if not isinstance(var, MutableVar):
+            raise Error(f'setting immutable var {name}')
         try:
-            self.vars()[name].set_val(val)
+            var.set_val(val)
         except Error as error:
             raise Error(f'failed to set var {name}: {error}')
 
