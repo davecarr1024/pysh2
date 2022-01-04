@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Optional
 
 from pysh import errors, types_, vals
 
@@ -105,13 +105,14 @@ class Statement(ABC):
 class VarDecl(Statement):
     type: types_.Type
     name: str
-    val: Expr
+    val: Optional[Expr]
 
     def apply(self, scope: MutableScope) -> None:
         scope.set_var(self.name, Var(self.type))
 
     def eval(self, scope: vals.MutableScope) -> None:
-        scope.set_var(self.name, vals.Var(self.type, self.val.eval(scope)))
+        scope.set_var(self.name, vals.Var(
+            self.type, self.val.eval(scope) if self.val is not None else None))
 
 
 @dataclass(frozen=True)

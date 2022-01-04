@@ -202,20 +202,14 @@ class Class(Val, types_.Type):
     static_scope: Scope
     object_scope: Scope
 
-    def __post_init__(self) -> None:
-        if '__init__' in self.static_scope:
-            init = self.static_scope.val('__init__')
-            if init.signature is None or not init.can_bind():
-                raise Error(f'invalid init {init}')
-
     def type(self) -> types_.Type:
         return types_.Builtin('class',
                               self.static_scope.all_types(),
                               self._init_signature())
 
     def _init_signature(self) -> Optional[types_.Signature]:
-        if '__init__' in self.static_scope:
-            return self.static_scope.val('__init__').bound_signature()
+        if '__init__' in self.object_scope:
+            return self.object_scope.val('__init__').bound_signature()
         return types_.Signature(types_.Params([]), self)
 
     def name(self) -> str:
@@ -262,6 +256,7 @@ class Object(Val):
         raise Error(f'{self} not callable')
 
 
+# TODO detect self, ...
 @dataclass(frozen=True)
 class BuiltinFunc(Val):
     func: typing.Callable[..., Val]
