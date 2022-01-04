@@ -125,8 +125,6 @@ class Scope(types_.Scope[Var]):
     def val(self, name: str) -> Val:
         return self.var(name).val()
 
-
-class MutableScope(Scope, types_.MutableScope[Var]):
     def set_val(self, name: str, val: Val) -> None:
         if not name in self.vars():
             raise Error(f'setting unknown var {name}')
@@ -137,6 +135,10 @@ class MutableScope(Scope, types_.MutableScope[Var]):
             var.set_val(val)
         except Error as error:
             raise Error(f'failed to set var {name}: {error}')
+
+
+class MutableScope(Scope, types_.MutableScope[Var]):
+    ...
 
 
 @dataclass(frozen=True)

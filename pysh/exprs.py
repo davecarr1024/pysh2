@@ -29,11 +29,6 @@ class Expr(ABC):
     def eval(self, scope: vals.Scope) -> vals.Val: ...
 
 
-class Decl(ABC):
-    @abstractmethod
-    def apply(self, scope: MutableScope) -> None: ...
-
-
 @dataclass(frozen=True)
 class Literal(Expr):
     val: vals.Val
@@ -45,7 +40,7 @@ class Literal(Expr):
         return self.val
 
 
-@ dataclass(frozen=True)
+@dataclass(frozen=True)
 class Ref(Expr):
     name: str
 
@@ -56,7 +51,7 @@ class Ref(Expr):
         return scope.val(self.name)
 
 
-@ dataclass(frozen=True)
+@dataclass(frozen=True)
 class Member(Expr):
     object: Expr
     name: str
@@ -68,7 +63,7 @@ class Member(Expr):
         return self.object.eval(scope).members().val(self.name)
 
 
-@ dataclass(frozen=True)
+@dataclass(frozen=True)
 class Args(list[Expr]):
     def __init__(self, exprs: Iterable[Expr]):
         super().__init__(exprs)
@@ -80,7 +75,7 @@ class Args(list[Expr]):
         return vals.Args([vals.Arg(expr.eval(scope)) for expr in self])
 
 
-@ dataclass(frozen=True)
+@dataclass(frozen=True)
 class Call(Expr):
     func: Expr
     args: Args
@@ -96,3 +91,51 @@ class Call(Expr):
 
     def eval(self, scope: vals.Scope) -> vals.Val:
         return self.func.eval(scope).call(scope, self.args.eval(scope))
+
+
+class Statement(ABC):
+    @abstractmethod
+    def apply(self, scope: MutableScope) -> None: ...
+
+    @abstractmethod
+    def eval(self, scope: vals.MutableScope) -> None: ...
+
+
+@dataclass(frozen=True)
+class VarDecl(Statement):
+    type: types_.Type
+    name: str
+    val: Expr
+
+    def apply(self, scope: MutableScope) -> None:
+        scope.set_var(self.name, Var(self.type))
+
+    def eval(self, scope: vals.MutableScope) -> None:
+        scope.set_var(self.name, vals.Var(self.type, self.val.eval(scope)))
+
+
+@dataclass(frozen=True)
+class Assignment(Statement):
+    name: str
+    val: Expr
+
+    def apply(self, scope: MutableScope) -> None:
+        scope.var(self.name).type().check_assignable(self.val.type(scope))
+
+    def eval(self, scope: vals.MutableScope) -> None:
+        scope.set_val(self.name, self.val.eval(scope))
+
+
+@dataclass(frozen=True)
+class MemberAssignment(Statement):
+    obj: Expr
+    member: str
+    val: Expr
+
+    def apply(self, scope: MutableScope) -> None:
+        self.obj.type(scope).member_types()[
+            self.member].check_assignable(self.val.type(scope))
+
+    def eval(self, scope: vals.MutableScope) -> None:
+        self.obj.eval(scope).members().set_val(
+            self.member, self.val.eval(scope))
