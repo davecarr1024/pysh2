@@ -10,15 +10,15 @@ class Func(vals.Val):
     signature: types_.Signature
     exprs: Sequence[exprs.Expr]
 
-    @property
+    
     def type(self) -> types_.Type:
         return types_.Builtin('func')
 
-    @property
+    
     def members(self) -> vals.Scope:
         return vals.Scope({})
 
-    @property
+    
     def signatures(self) -> types_.Signatures:
         return types_.Signatures([self.signature])
 

@@ -31,7 +31,7 @@ class Decl(Expr):
     name: str
     expr: Expr
 
-    @property
+    
     def type(self) -> types_.Type:
         return self._type
 
@@ -50,7 +50,7 @@ class Decl(Expr):
 class Literal(Expr):
     val: vals.Val
 
-    @property
+    
     def type(self) -> types_.Type:
         return self.val.type
 
@@ -62,7 +62,7 @@ class Literal(Expr):
 class Ref(Expr):
     name: str
 
-    @property
+    
     def type(self) -> types_.Type:
         return self.scope[self.name].type
 
@@ -75,7 +75,7 @@ class Member(Expr):
     object: Expr
     name: str
 
-    @property
+    
     def type(self) -> types_.Type:
         return self.object.type.member_types[self.name]
 
@@ -88,7 +88,7 @@ class Args(list[Expr]):
     def __init__(self, exprs: Iterable[Expr]):
         super().__init__(exprs)
 
-    @property
+    
     def types(self) -> types_.Args:
         return types_.Args([types_.Arg(expr.type) for expr in self])
 
@@ -101,11 +101,11 @@ class Call(Expr):
     func: Expr
     args: Args
 
-    @property
+    
     def signature(self) -> types_.Signature:
         return self.func.type.signatures.for_args(self.args.types)
 
-    @property
+    
     def type(self) -> types_.Type:
         return self.signature.return_type
 

@@ -114,7 +114,7 @@ class Val(types_.Val):
     _type: types_.Type
     name: str = 'v'
 
-    @property
+    
     def type(self) -> types_.Type:
         return self._type
 

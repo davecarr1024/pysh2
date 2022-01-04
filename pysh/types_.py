@@ -1,6 +1,6 @@
-from dataclasses import dataclass
-from abc import ABC, abstractmethod, abstractproperty
-from typing import Generic, Iterable, Mapping, MutableMapping, Optional, TypeVar
+from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
+from typing import Generic, Iterable, Mapping, MutableMapping, Optional, TypeVar, final
 
 from pysh import errors
 
@@ -10,26 +10,33 @@ class Error(errors.Error):
 
 
 class Type(ABC):
-    @abstractproperty
+    @abstractmethod
     def name(self) -> str: ...
 
     @abstractmethod
-    def check_assignable(self, type: 'Type') -> None: ...
+    def signature(self) -> Optional['Signature']: ...
 
-    @abstractproperty
-    def signatures(self) -> 'Signatures': ...
-
-    @abstractproperty
+    @abstractmethod
     def member_types(self) -> Mapping[str, 'Type']: ...
+
+    @abstractmethod
+    def check_assignable(self, type: 'Type') -> None: ...
 
 
 @dataclass(frozen=True)
 class Builtin(Type):
     _name: str
+    _member_types: Mapping[str, Type]
+    _signature: Optional['Signature']
 
-    @property
     def name(self) -> str:
         return self._name
+
+    def signature(self) -> Optional['Signature']:
+        return self._signature
+
+    def member_types(self) -> Mapping[str, Type]:
+        return self._member_types
 
     def check_assignable(self, type: 'Type') -> None:
         if type != self:
@@ -90,139 +97,62 @@ class Signature:
         return Signature(self.params.without_first_param(), self.return_type)
 
 
-class Signatures(list[Signature]):
-    def __init__(self, signatures: Iterable[Signature]):
-        super().__init__(signatures)
-
-    def for_args(self, args: Args) -> Signature:
-        if len(self) == 0:
-            raise Error(f'not callable')
-        errors = list[Error]()
-        signatures = list[Signature]()
-        for signature in self:
-            try:
-                signature.check_args_assignable(args)
-                signatures.append(signature)
-            except Error as error:
-                errors.append(error)
-        if len(signatures) > 1:
-            raise Error(f'ambiguous call: {signatures}')
-        elif len(signatures) == 1:
-            return signatures[0]
-        else:
-            raise Error(f'no signatures matched: {errors}')
-
-    def without_first_param(self) -> 'Signatures':
-        return Signatures(signature.without_first_param() for signature in self)
-
-
-class Val(ABC):
-    @abstractproperty
-    def type(self) -> Type: ...
-
-
-_ValType = TypeVar('_ValType', bound=Val)
-
-
 @dataclass
-class Var(Generic[_ValType]):
-    _type: Type
-    _val: _ValType
+class Var(ABC):
+    __type: Type
 
-    def __post_init__(self):
-        try:
-            self._type.check_assignable(self._val.type)
-        except Error as error:
-            raise Error(f'{self} has incompatible val: {error}')
-
-    @property
+    @final
     def type(self) -> Type:
-        return self._type
-
-    @property
-    def val(self) -> _ValType:
-        return self._val
-
-    @val.setter
-    def val(self, val: _ValType) -> None:
-        raise Error(f'unable to set {self} with {val}: immutable')
-
-    def check_assignable(self, val: _ValType) -> None:
-        try:
-            self._type.check_assignable(val.type)
-        except Error as error:
-            raise Error(f'{self} unable to be set with val {val}: {error}')
-
-    @staticmethod
-    def for_val(val: _ValType) -> 'Var[_ValType]':
-        return Var[_ValType](val.type, val)
+        return self.__type
 
 
-@dataclass
-class MutableVar(Var[_ValType]):
-    @property
-    def val(self) -> _ValType:
-        return self._val
-
-    @val.setter
-    def val(self, val: _ValType) -> None:
-        self.check_assignable(val)
-        self._val = val
-
-    @staticmethod
-    def for_val(val: _ValType) -> 'MutableVar[_ValType]':
-        return MutableVar[_ValType](val.type, val)
+_VarType = TypeVar('_VarType', bound=Var)
 
 
 @dataclass(frozen=True)
-class Scope(Generic[_ValType]):
-    _vars: MutableMapping[str, Var[_ValType]]
-    parent: Optional['Scope[_ValType]'] = None
+class Scope(Generic[_VarType]):
+    _vars: MutableMapping[str, _VarType]
+    parent: Optional['Scope[_VarType]'] = field(default=None)
 
+    @final
     def __contains__(self, name: str) -> bool:
         return name in self._vars or (self.parent is not None and name in self.parent)
 
-    def __getitem__(self, name: str) -> _ValType:
+    @final
+    def var(self, name: str) -> _VarType:
         if name in self._vars:
-            return self._vars[name].val
+            return self._vars[name]
         elif self.parent is not None:
-            return self.parent[name]
+            return self.parent.var(name)
         else:
             raise Error(f'unknown var {name}')
 
-    @property
-    def vars(self) -> Mapping[str, Var[_ValType]]:
+    @final
+    def vars(self) -> Mapping[str, _VarType]:
         return self._vars
 
-    @property
-    def vals(self) -> Mapping[str, _ValType]:
-        return {name: var.val for name, var in self._vars.items()}
+    @final
+    def types(self) -> Mapping[str, Type]:
+        return {name: var.type() for name, var in self.vars().items()}
 
-    def all_vals(self) -> Mapping[str, _ValType]:
-        vals = dict[str, _ValType]()
+    @final
+    def all_vars(self) -> Mapping[str, _VarType]:
+        vars = dict[str, _VarType]()
         if self.parent is not None:
-            vals.update(self.parent.all_vals())
-        vals.update(self.vals)
-        return vals
+            vars.update(self.parent.all_vars())
+        vars.update(self.vars())
+        return vars
 
+    @final
     def all_types(self) -> Mapping[str, Type]:
-        return {name: val.type for name, val in self.all_vals().items()}
+        return {name: var.type() for name, var in self.all_vars().items()}
 
 
 @dataclass(frozen=True)
-class MutableScope(Scope[_ValType]):
-    def __setitem__(self, name: str, val: _ValType) -> None:
-        if name in self._vars:
-            try:
-                self._vars[name].val = val
-            except Error as error:
-                raise Error(f'unable to set {name} to val {val}: {error}')
-        elif isinstance(self.parent, MutableScope):
-            self.parent[name] = val
-        else:
-            raise Error(f'unknown var {name}')
-
-    def decl(self, name: str, var: Var[_ValType]) -> None:
+class MutableScope(Scope[_VarType]):
+    @final
+    def set_var(self, name: str, var: _VarType) -> None:
         if name in self._vars:
             raise Error(f'duplicate var {name}')
-        self._vars[name] = var
+        else:
+            self._vars[name] = var
