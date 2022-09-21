@@ -46,7 +46,7 @@ class Literal(HeadRule):
         return f'"{self.token_type}"'
 
     def apply(self, state: State) -> ResultAndState:
-        return ResultAndState.for_child(super().apply(state).with_rule_name(self.token_type))
+        return super().apply(state).with_rule_name(self.token_type).as_child_result()
 
     def pred(self, head: _Item) -> bool:
         return head.type == self.token_type

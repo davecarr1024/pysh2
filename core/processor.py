@@ -115,13 +115,12 @@ class ResultAndState(Generic[_ResultValueType, _StateValueType]):
     def with_rule_name(self, rule_name: str) -> 'ResultAndState[_ResultValueType,_StateValueType]':
         return ResultAndState[_ResultValueType, _StateValueType](self.result.with_rule_name(rule_name), self.state)
 
-    @staticmethod
-    def for_child(child: 'ResultAndState[_ResultValueType,_StateValueType]') -> 'ResultAndState[_ResultValueType,_StateValueType]':
+    def as_child_result(self) -> 'ResultAndState[_ResultValueType,_StateValueType]':
         return ResultAndState[_ResultValueType, _StateValueType](
             Result[_ResultValueType](
-                children=[child.result],
+                children=[self.result],
             ),
-            child.state
+            self.state
         )
 
 
@@ -164,9 +163,7 @@ class Ref(Rule[_ResultValueType, _StateValueType]):
 
     def apply(self, state: State[_ResultValueType, _StateValueType]) -> ResultAndState[_ResultValueType, _StateValueType]:
         try:
-            child_result = state.processor.apply_rule_to_state(
-                self.rule_name, state)
-            return ResultAndState[_ResultValueType, _StateValueType].for_child(child_result)
+            return state.processor.apply_rule_to_state(self.rule_name, state).as_child_result()
         except Error as error:
             raise Error(children=[error])
 
@@ -201,7 +198,7 @@ class Or(Rule[_ResultValueType, _StateValueType]):
         child_errors: MutableSequence[Error] = []
         for child in self.children:
             try:
-                return ResultAndState[_ResultValueType, _StateValueType].for_child(child.apply(state))
+                return child.apply(state).as_child_result()
             except Error as error:
                 child_errors.append(error)
         raise Error(children=child_errors)
@@ -262,7 +259,7 @@ class ZeroOrOne(Rule[_ResultValueType, _StateValueType]):
 
     def apply(self, state: State[_ResultValueType, _StateValueType]) -> ResultAndState[_ResultValueType, _StateValueType]:
         try:
-            return ResultAndState[_ResultValueType, _StateValueType].for_child(self.child.apply(state))
+            return self.child.apply(state).as_child_result()
         except Error:
             return ResultAndState[_ResultValueType, _StateValueType](Result[_ResultValueType](), state)
 
